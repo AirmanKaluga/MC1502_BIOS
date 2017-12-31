@@ -1202,33 +1202,3 @@ proc	video_init	near
 endp	video_init
 
 
-;--------------------------------------------------------------------------------------------------
-; PC speaker beep (length in bl)
-;--------------------------------------------------------------------------------------------------
-proc	beep	near
-
-	push	ax
-	push	cx
-	mov	al, 10110110b			; Timer IC 8253 square waves
-	out	43h, al 			;   channel 2, speaker
-	mov	ax, 528h			; Get countdown constant word
-	out	42h, al 			;   send low order
-	mov	al, ah				;   load high order
-	out	42h, al 			;   send high order
-	in	al, 61h 			; Read IC 8255 machine status
-	push	ax
-	or	al, 00000011b
-	out	61h, al 			; Turn speaker on
-	xor	cx, cx
-@@delay:
-	loop	@@delay
-	dec	bl
-	jnz	@@delay
-	pop	ax
-	out	61h, al 			; Turn speaker off
-	pop	cx
-	pop	ax
-	ret
-
-endp	beep
-

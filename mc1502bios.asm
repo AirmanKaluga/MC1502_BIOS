@@ -37,7 +37,7 @@ Banner:
 str_banner      db 'Elektronika MC1502 BIOS v7.3', 0
 
 Copiright:	
-		db LF, CR, 7, 'Copiright (C) 1989-2017, NPO "Microprocessor" 1989', LF, CR, 0
+		db LF, CR, 'Copiright (C) 1989-2017, NPO "Microprocessor" 1989', LF, CR, 0
 empty_string:
 		db LF, CR, 0
 date_full:
@@ -48,16 +48,16 @@ str_cpu:
 str_8088:
 	 	db 'Intel 8088 5.33Mhz', 0
 str_v20:                                                  	
-		db 'NEC V20 5.33Mhz ', 0
+		db 'NEC V20 5.33Mhz', 0
 str_8087:
 		db ' with Intel (C) 8087 FPU', 0
 
 TestingSystem:
-		db LF, CR, 'Memory testing: 000K OK', 0
+		db  LF, CR, 'Memory testing: 000K OK', 0
 FailedAt:
-		db 7, LF, CR, 'Failed at ', 0
+		db  LF, CR, 'Failed at ', 0
 SystemNotFound:
-		db 7, LF, CR, 'System not found.', LF, CR, 0
+		db  LF, CR, 'System not found.', LF, CR, 0
 
 port_int_fdc:
                 db  48h	 		; ...
@@ -242,6 +242,7 @@ test_first_8K_ram:				; ...
                 not	[word ptr bx]
                 add	ch, 8
                 mov	ds, cx
+
                 assume ds:nothing
                 add	di, 20h
                 cmp	di, 2E0h
@@ -254,6 +255,8 @@ Print_Startup_Info:				; ...
                 mov	al, 0FCh
                 out	21h, al		; Interrupt controller,	8259A.
                 sti
+		mov	bl ,1
+		call 	beep
 		call	video_init
 		call	clear_screen
 		call	print_title
@@ -537,13 +540,16 @@ search_loop:				; ...
                 mov	ax, BDAseg
                 mov	ds, ax
                 add	[word ptr ds:gen_use_seg_+1], 2
-                cmp	[word ptr ds:gen_use_seg_], 0C200h
+                cmp	[word ptr ds:gen_use_seg_], 0FE00h
                 jz	short no_additional_rom
                 mov	es, [word ptr ds:gen_use_seg_]
                 assume es:nothing
                 cmp	[word ptr es:0], 0AA55h
                 jnz	short search_loop
                 call	[dword ptr ds:gen_use_ptr_]
+		mov	es, bx	
+		mov	bl, 5 * 18		; Ticks to pause at 18.2 Hz
+
                 jmp	short search_loop
 
 no_additional_rom:				; ...
@@ -556,6 +562,36 @@ no_additional_rom:				; ...
                 pop	bx
 		ret
 endp		search_rom	
+
+;--------------------------------------------------------------------------------------------------
+; PC speaker beep (length in bl)
+;--------------------------------------------------------------------------------------------------
+proc	beep	near
+
+	push	ax
+	push	cx
+	mov	al, 10110110b			; Timer IC 8253 square waves
+	out	43h, al 			;   channel 2, speaker
+	mov	ax, 528h			; Get countdown constant word
+	out	42h, al 			;   send low order
+	mov	al, ah				;   load high order
+	out	42h, al 			;   send high order
+	in	al, 61h 			; Read IC 8255 machine status
+	push	ax
+	or	al, 00000011b
+	out	61h, al 			; Turn speaker on
+	xor	cx, cx
+@@delay:
+	loop	@@delay
+	dec	bl
+	jnz	@@delay
+	pop	ax
+	out	61h, al 			; Turn speaker off
+	pop	cx
+	pop	ax
+	ret
+
+endp	beep
 
 ;---------------------------------------------------------------------------------------------------
 include int19h.asm 	; Warm Boot
