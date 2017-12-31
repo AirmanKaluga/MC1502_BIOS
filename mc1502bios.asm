@@ -35,7 +35,7 @@ Banner:
 str_banner      db 'Elektronika MS1502 BIOS v7.3', 0
 
 Copiright:	
-		db LF, CR, 7, 'Copiright (C) 1989-2017, NPO "Electronmash" 1989', LF, CR, 0
+		db LF, CR, 7, 'Copiright (C) 1989-2017, NPO "Microprocessor" 1989', LF, CR, 0
 empty_string:
 		db LF, CR, 0
 date_full:
@@ -89,7 +89,7 @@ lpt_1:		dw    378h
 lpt_2:		dw    278h
 lpt_3:		dw    0
 bios_data_seg:	dw    0
-equip_bit:	dw    626Dh
+equip_bit:	dw    622Dh
 manufact_test:	db    0
 main_ram_size:	dw    0
 error_codes:	dw    40h
@@ -231,7 +231,7 @@ init_fdc_BDA:				; ...
                 mov	ds, ax
                 assume ds:nothing
 
-loc_FE12E:				; ...
+test_first_8K_ram:				; ...
                 mov	ax, [bx]
                 not	ax
                 mov	[bx], ax
@@ -243,7 +243,7 @@ loc_FE12E:				; ...
                 assume ds:nothing
                 add	di, 20h
                 cmp	di, 2E0h
-                jb	short loc_FE12E
+                jb	short test_first_8K_ram
 
 Print_Startup_Information:				; ...
                 mov	[es:13h], di
