@@ -1,3 +1,5 @@
+BOOT_DELAY	= 3		; Seconds to wait after memory test (keypress will bypass)
+
 	Ideal
 	model small ; produce .EXE file then truncate it
 ;---------------------------------------------------------------------------------------------------
@@ -32,7 +34,7 @@ segment		code byte public 'CODE'
 
 
 Banner:
-str_banner      db 'Elektronika MS1502 BIOS v7.3', 0
+str_banner      db 'Elektronika MC1502 BIOS v7.3', 0
 
 Copiright:	
 		db LF, CR, 7, 'Copiright (C) 1989-2017, NPO "Microprocessor" 1989', LF, CR, 0
@@ -230,13 +232,13 @@ init_fdc_BDA:				; ...
                 mov	di, ax
                 mov	ds, ax
                 assume ds:nothing
-
+		call	search_rom
 test_first_8K_ram:				; ...
                 mov	ax, [bx]
                 not	ax
                 mov	[bx], ax
                 cmp	ax, [bx]
-                jnz	short Print_Startup_Information
+                jnz	short Print_Startup_Info
                 not	[word ptr bx]
                 add	ch, 8
                 mov	ds, cx
@@ -244,16 +246,15 @@ test_first_8K_ram:				; ...
                 add	di, 20h
                 cmp	di, 2E0h
                 jb	short test_first_8K_ram
+		
 
-Print_Startup_Information:				; ...
+
+Print_Startup_Info:				; ...
                 mov	[es:13h], di
                 mov	al, 0FCh
                 out	21h, al		; Interrupt controller,	8259A.
                 sti
-		mov 	ax, 3
-		int 	10h
-		;call	video_init
-		
+		call	video_init
 		call	clear_screen
 		call	print_title
                 mov 	si, offset Copiright
@@ -262,9 +263,6 @@ Print_Startup_Information:				; ...
 		call	print_string
 		mov 	si, offset date_full
 		call	print_string
-		
-		cmp	bp, 1234h
-                jz	short search_addinional_rom
 
 		call	print_cpu_fpu
 		
@@ -281,6 +279,7 @@ Print_Startup_Information:				; ...
                 mov	es, ax
                 assume es:nothing
                 jmp	short Mem_test
+
 ; ---------------------------------------------------------------------------
 Mem_test_loop:
                 call	Mem_test_pattern
@@ -306,33 +305,14 @@ Mem_test:				; ...
                 cmp	bx, [ds:main_ram_size_]
                 jb      short  Mem_test_loop
 
-search_addinional_rom:				; ...
-                mov	ax, BDAseg
-                mov	ds, ax
-                mov	[word ptr ds:gen_use_ptr_], 3
-                mov	[word ptr ds:gen_use_seg_], 0BE00h
-
-search_loop:				; ...
-                mov	ax, BDAseg
-                mov	ds, ax
-                add	[word ptr ds:gen_use_seg_+1], 2
-                cmp	[word ptr ds:gen_use_seg_], 0FE00h
-                jz	short no_additional_rom
-                mov	es, [word ptr ds:gen_use_seg_]
-                assume es:nothing
-                cmp	[word ptr es:0], 0AA55h
-                jnz	short search_loop
-                call	[dword ptr ds:gen_use_ptr_]
-                jmp	short search_loop
-; ---------------------------------------------------------------------------
-
-no_additional_rom:				; ...
                 mov	si, empty_string
                 call	print_string
                 xor	cx, cx
 
+		mov	ax, 1Eh				; Flush keyboard buffer in case user
+		mov	[es:1Ah], ax			;   was mashing keys during memory test
+		mov	[es:1Ch], ax
 
-@@OK:				; ...
                 int	19h		; DISK BOOT
                                         ; causes reboot	of disk	system
 
@@ -361,7 +341,6 @@ Test_error:				; ...
                 xor	ax, ax
                 int	16h		; KEYBOARD - READ CHAR FROM BUFFER, WAIT IF EMPTY
                                         ; Return: AH = scan code, AL = character
-                jmp	short search_addinional_rom
 endp		post
 
 proc		Mem_test_pattern near		; ...
@@ -390,6 +369,7 @@ proc		mem_test_cycle near		; ...
                 repe scasw
                 retn
 endp		mem_test_cycle
+
 
 ;---------------------------------------------------------------------------------------------------
 ;  Print cpu and fpu type
@@ -540,6 +520,42 @@ proc	clear_screen	near
 
 endp	clear_screen
 
+proc		search_rom	near
+                push    bx
+                push    cx
+                push    dx
+                push	si
+                push	di
+                push	ds
+                push	es
+                mov	ax, BDAseg
+                mov	ds, ax
+                mov	[word ptr ds:gen_use_ptr_], 3
+                mov	[word ptr ds:gen_use_seg_], 0BE00h
+
+search_loop:				; ...
+                mov	ax, BDAseg
+                mov	ds, ax
+                add	[word ptr ds:gen_use_seg_+1], 2
+                cmp	[word ptr ds:gen_use_seg_], 0C200h
+                jz	short no_additional_rom
+                mov	es, [word ptr ds:gen_use_seg_]
+                assume es:nothing
+                cmp	[word ptr es:0], 0AA55h
+                jnz	short search_loop
+                call	[dword ptr ds:gen_use_ptr_]
+                jmp	short search_loop
+
+no_additional_rom:				; ...
+		pop	es
+		pop	ds
+		pop	di
+		pop	si
+                pop	dx
+                pop	cx
+                pop	bx
+		ret
+endp		search_rom	
 
 ;---------------------------------------------------------------------------------------------------
 include int19h.asm 	; Warm Boot
