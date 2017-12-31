@@ -553,6 +553,292 @@ loc_FEF66:				; ...
                 mov	al, 0F0h
                 jmp	loc_FE7F3
 ; ---------------------------------------------------------------------------
+
+proc		sub_FE2EF near		; ...
+                push	ax
+                push	cx
+                mov	ax, si
+                inc	ax
+                mov	ah, ch
+                test	[ds:dsk_recal_stat], al
+                jnz	short loc_FE308
+                call	sub_FE394
+                jnb	short loc_FE304
+                pop	cx
+                jmp	short loc_FE36A
+; ---------------------------------------------------------------------------
+; dsk_status ?
+loc_FE304:				; ...
+                or	[ds:dsk_recal_stat], al
+
+loc_FE308:				; ...
+                mov	al, ah
+                call	sub_FE2D3
+                mov	dl, [ds:dsk_status_1]
+                inc	dx
+                out	dx, al
+                mov	cl, [ds:dsk_status_7]
+                shl	al, cl
+                cmp	al, [si+dsk_status_5]
+                jz	short loc_FE360
+                inc	dx
+                inc	dx
+                out	dx, al
+                xchg al, [si+dsk_status_5]
+                dec	dx
+                dec	dx
+                out	dx, al
+                dec	dx
+                mov	al, 10h
+                out	dx, al
+                call	sub_FE2DD
+                mov	al, ah
+                mov	dl, [ds:dsk_status_1]
+                inc	dx
+                out	dx, al
+                test	[byte ptr ds:dsk_motor_stat], 80h
+                jz	short loc_FE360
+                inc	dx
+                inc	dx
+                out	dx, al
+                mov	dl, [ds:dsk_status_1]
+                mov	al, bl
+                out	dx, al
+                mov	dl, [ds:dsk_status_3]
+                in	al, dx
+                mov	dl, [ds:dsk_status_1]
+                in	al, dx
+                and	al, 19h
+                jz	short loc_FE360
+                or	[byte ptr ds:dsk_ret_code_], 40h
+                stc
+                pop	cx
+                jmp	short loc_FE36A
+; ---------------------------------------------------------------------------
+
+loc_FE360:				; ...
+                pop	cx
+                mov	al, cl
+                mov	dl, [ds:dsk_status_1]
+                inc	dx
+                inc	dx
+                out	dx, al
+
+loc_FE36A:				; ...
+                pop	ax
+                retn
+endp		sub_FE2EF
+
+proc		sub_FE3C3 near		; ...
+                push	ax
+                push	cx
+                and	dl, 1
+                mov	si, dx
+                and	si, 1
+                mov	cl, dl
+                inc	cx
+                mov	[byte ptr ds:dsk_status_7], 0
+                test	[byte ptr si+90h], 10h
+                jnz	short loc_FE3E1
+                mov	[byte ptr si+0090h], 17h
+
+loc_FE3E1:				; ...
+                test	[byte ptr si+0090h], 20h
+                jz	short loc_FE3F8
+                cmp	ch, 2Ch
+                jnb	short loc_FE3F3
+                inc	[byte ptr ds:dsk_status_7]
+                jmp	short loc_FE3F8
+; ---------------------------------------------------------------------------
+
+loc_FE3F3:				; ...
+                and	[byte ptr si+90h], 0DFh
+
+loc_FE3F8:				; ...
+                mov	al, 82h
+                test	[byte ptr ds:dsk_motor_stat], 40h
+                jz	short loc_FE404
+                xor	dl, 1
+
+loc_FE404:				; ...
+                test	dl, 1
+                jz	short loc_FE40B
+                mov	al, 8Ch
+
+loc_FE40B:				; ...
+                or	al, dh
+                test	[byte ptr si+90h], 0C0h
+                jnz	short loc_FE416
+                or	al, 10h
+
+loc_FE416:				; ...
+                rol	al, 1
+                call	sub_FE2D3
+                mov	ah, 0FFh
+                mov	[ds:dsk_motor_tmr], ah
+
+                inc	ah
+                mov	dl, [ds:dsk_status_2]
+                out	dx, al
+                in	al, dx
+                mov	dl, [ds:dsk_status_1]
+                mov	al, 0D0h
+                out	dx, al
+                test	[ds:dsk_motor_stat], cl
+                jnz	short loc_FE446
+
+loc_FE436:				; ...
+                mov	al, [ds:dsk_motor_tmr]
+                sub	al, ah
+                not	al
+                shr	al, 1
+                cmp	al, [cs:MotorOn]
+                jb	short loc_FE436
+
+loc_FE446:				; ...
+                and	[byte ptr ds:dsk_motor_stat], 0FCh
+                or	[ds:dsk_motor_stat], cl
+                pop	cx
+                pop	ax
+                retn
+endp		sub_FE3C3
+
+proc		sub_FE2D3 near		; ...
+                mov	dh, [ds:dsk_status_4]
+                dec	dh
+                and	dh, 1
+                retn
+endp		sub_FE2D3
+
+
+
+
+
+proc		sub_FE2DD near		; ...
+                push ax
+                mov	[byte ptr ds:dsk_motor_tmr], 0FFh ; dsk_motor_tmr
+                mov	[byte ptr ds:dsk_motor_tmr], 0FFh ; dsk_motor_tmr
+
+loc_FE2E8:				; ...
+                in	al, dx
+                shr	al, 1
+                jb	short loc_FE2E8
+                pop	ax
+                retn
+endp		sub_FE2DD
+
+
+
+
+
+
+
+
+
+proc		sub_FE36C near		; ...
+                mov	al, 0D0h
+                call	sub_FE2D3
+                mov	dl, [ds:dsk_status_1]
+                out	dx, al
+                call	sub_FE2DD
+                mov	al, 0C0h
+                out	dx, al
+                mov	ah, 3
+                add	ah, dl
+
+loc_FE380:				; ...
+                mov	dl, [ds:dsk_status_3]
+                in	al, dx
+                shr	al, 1
+                mov	dl, ah
+                in	al, dx
+                jb	short loc_FE380
+                mov	dl, [ds:dsk_status_1]
+                in	al, dx
+                and	al, 10h
+                retn
+endp		sub_FE36C
+
+
+
+
+
+proc		sub_FE394 near		; ...
+                push	ax
+                mov	dl, [ds:dsk_status_2]
+                in	al, dx
+                mov	dl, [ds:dsk_status_1]
+                mov	al, 0D0h
+                out	dx, al
+                call	sub_FE2DD
+                mov	al, 9
+                out	dx, al
+                call	sub_FE2DD
+                in	al, dx
+                and	al, 5
+                cmp	al, 4
+                jz	short loc_FE3B7
+                or	[byte ptr ds:dsk_ret_code_], 80h
+                stc
+
+loc_FE3B7:				; ...
+                mov	dl, [ds:dsk_status_2]
+                in	al, dx
+                mov	[byte ptr si+0046h], 0
+                pop	ax
+                retn
+endp		sub_FE394
+
+proc		sub_FE452 near		; ...
+                cli
+                push	ax
+                mov	al, [ds:video_mode_reg_]
+                test	al, 1
+                jz	short loc_FE48C
+                mov	ax, es
+                push	cx
+                mov	cl, 4
+                push	bx
+                shr	bx, cl
+                add	ax, bx
+                pop	bx
+                pop	cx
+                push	ax
+                mov	ax, [ds:0013h] ; main_ram_size
+                cmp	ax, 0060h  ; 96 kb
+                pop	ax
+                ja	short loc_FE475
+                mov	al, 0
+                jmp	short loc_FE488
+; ---------------------------------------------------------------------------
+
+loc_FE475:				; ...
+                cmp	ax, 7EC0h
+                jb	short loc_FE48C
+                cmp	ax, 0C000h
+                jnb	short loc_FE48C
+                mov	al, 0
+                jmp	short loc_FE488
+endp		sub_FE452
+
+
+
+
+
+proc		sub_FE483 near		; ...
+                sti
+                push	ax
+                mov	al, [ds:video_mode_reg_]
+
+loc_FE488:				; ...
+                mov	dx, 3D8h
+                out	dx, al
+
+loc_FE48C:				; ...
+                pop	ax
+                retn
+endp		sub_FE483
+
 unk_FEF8F:
                 db    0	;
                 db  20h ;
