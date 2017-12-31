@@ -9,9 +9,9 @@ proc 		int_1Ah near
                 assume ds:nothing
                 pop	ax
                 or	ah, ah
-                jz	short Read_clock
+                jz	short Read_Clock
                 dec	ah
-                jz	short Set_clock
+                jz	short Set_Clock
 
 exit_int_1a:				; ...
                 pop	ds
@@ -27,7 +27,7 @@ Read_Clock:				; ...
                 jmp	short exit_int_1a
 ; ---------------------------------------------------------------------------
 
-Set_CLock:				; ...
+Set_Clock:				; ...
                 mov	[ds:timer_low_], dx
                 mov	[ds:timer_hi_], cx
                 mov	[byte ptr ds:timer_rolled_], 0
