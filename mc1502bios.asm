@@ -70,15 +70,39 @@ segment		code byte public 'CODE'
 
 
 Banner:
-str_banner	db  0Ah
-                db  0Dh
-                db    7
-                db 'New optimized superfast MS 1502 BIOS Version 7.2 (c) S. Mikayev '
-                db '1996'
+	        db 'Elektronika MS 1502 BIOS Version 7.3 - 01/12/2018', 0
+
+Copiright:	
+		db LF, CR, 7, "Updated Airman and RUS", LF, CR, 0
 empty_string:
-		db 0Ah
-                db 0Dh
-                db 18 dup (0)
+		db LF, CR, 0
+str_8088:
+	 	db LF, CR, 'Intel (C) 8088 Processor 5.33Mhz Installed', LF, CR, 0
+str_v20:
+	   	db LF, CR, 'NEC (C) V20 Processor 5.33Mhz Installed', LF, CR, 0
+TestingSystem:
+		db LF, CR, '000 K System RAM Passed', 0
+FailedAt:
+		db 7, LF, CR, 'Failed at ', 0
+SystemNotFound:
+		db 7, LF, CR, 'System not found.', LF, CR, 0
+str_8087:
+		db LF, CR, 'Intel (C) 8087 FPU 5.33Mhz Installed', 0
+str_nofpu:	db LF, CR, 'No FPU Istalled', 0
+port_int_fdc:
+                db  48h	 		; ...
+                db  4Ch
+                db  4Eh
+                db  4Dh
+
+port_ext_fdc:
+                db  0Ch
+                db  00h
+                db  08h
+                db  0Ah
+
+
+
 
 ; ---------------------------------------------------------------------------
 proc		post	near
@@ -241,16 +265,22 @@ Print_Startup_Information:				; ...
                 mov	al, 0FCh
                 out	21h, al		; Interrupt controller,	8259A.
                 sti
+
                 mov	ax, 3
                 int	10h		; - VIDEO - SET	VIDEO MODE
                                         ; AL = mode
-                mov	si, Banner
-                call	print_string
-                cmp	bp, 1234h
+		call	print_title
+                mov 	si, offset Copiright
+		call	print_string
+
+		cmp	bp, 1234h
                 jz	short search_addinional_rom
-                mov	si, offset TestingSystem
+
+		call	print_cpu_fpu
+		
+		mov	si, offset TestingSystem
                 call	print_string
-                mov	cx, 2
+                mov	cx, 14h
                 call	sub_FE247
                 mov	ax, es
                 mov	ds, ax
@@ -285,7 +315,7 @@ loc_FE182:				; ...
                 call	sub_FE262
                 add	bx, 20h
                 cmp	bx, [ds:main_ram_size_]
-                jb	short loc_FE17D
+                jb      short  loc_FE17D
 
 search_addinional_rom:				; ...
                 mov	ax, BDAseg
@@ -348,8 +378,42 @@ loc_FE1F0:				; ...
                 jmp	short search_addinional_rom
 endp		post
 
+;---------------------------------------------------------------------------------------------------
+;  Print cpu and fpu type
+;---------------------------------------------------------------------------------------------------
+proc		print_cpu_fpu near
+        	xor     al, al
+		mov	al, 40h				; mul on V20 does not affect the zero flag
+		mul	al				;   but on an 8088 the zero flag is used
+		jz	@@have_v20			; Was zero flag set?
+		mov	si, offset str_8088		;   No, so we have an 8088 CPU
+		call	print_string
+		jmp	fpu
+@@have_v20:
+		mov	si, offset str_v20		;   Otherwise we have a V20 CPU
+		call	print_string
 
+fpu:		mov	ax, BDAseg
+		mov 	ds, ax
+		fninit					; Try to init FPU
+		mov	si, 0200h
+		mov	[byte si+1], 0			; Clear memory byte
+		fnstcw	[word si]			; Put control word in memory
+		mov	ah, [si+1]
+		cmp	ah, 03h				; If ah is 03h, FPU is present
+		jne	@@no_8087
+		or	[byte ds:10h], 00000010b	; Set FPU in equp list
+		mov	si, offset str_8087
+		call 	print_string
+		ret
+@@no_8087:
+		and	[byte ds:10h], 11111101b	; Set no FPU in equp list
+		mov	si, offset str_nofpu
+	        call	print_string
+		ret
 
+endp		print_cpu_fpu
+;-------------------------------------------------------------------------------------------------------
 proc		sub_FE21E near		; ...
                 mov	ax, 0FFFFh
                 call	sub_FE238
@@ -368,10 +432,10 @@ endp		sub_FE21E ; sp-analysis	failed
 
 
 proc		sub_FE238 near		; ...
-                mov	cx, 4000h
+                mov	cx, 2000h
                 xor	di, di
                 rep stosw
-                mov	cx, 4000h
+                mov	cx, 2000h
                 xor	di, di
                 repe scasw
                 retn
@@ -383,7 +447,7 @@ endp		sub_FE238
 
 proc		sub_FE247 near		; ...
                 mov	ax, 0E08h
-                int	10h		; - VIDEO - WRITE CHARACTER AND	ADVANCE	CURSOR (TTY WRITE)
+		int	10h		; - VIDEO - WRITE CHARACTER AND	ADVANCE	CURSOR (TTY WRITE)
                                         ; AL = character, BH = display page (alpha modes)
                                         ; BL = foreground color	(graphics modes)
                 loop	sub_FE247
@@ -396,18 +460,17 @@ endp		sub_FE247
 
 
 
-proc		print_string near		; ...
+proc            print_string near               ; ...
 print_string_loop:
-                lods	[byte ptr cs:si]
-                or	al, al
-                jz	short locret_FE24E
-                mov	ah, 0Eh
-                int	10h		; - VIDEO - WRITE CHARACTER AND	ADVANCE	CURSOR (TTY WRITE)
+                lods    [byte ptr cs:si]
+                or      al, al
+                jz      short locret_FE24E
+                mov     ah, 0Eh
+                int     10h             ; - VIDEO - WRITE CHARACTER AND ADVANCE CURSOR (TTY WRITE)
                                         ; AL = character, BH = display page (alpha modes)
-                                        ; BL = foreground color	(graphics modes)
-                jmp	short print_string_loop
-endp		print_string
-
+                                        ; BL = foreground color (graphics modes)
+                jmp     short print_string_loop
+endp            print_string
 
 
 
@@ -449,28 +512,6 @@ proc		sub_FE26B near		; ...
 endp		sub_FE26B
 
 ; ---------------------------------------------------------------------------
-TestingSystem:
-                db 0Ah, 0Dh, 'Testing system memory ...'
-                db 0Ah, 0Dh, 'Complete 000 K', 0
-
-FailedAt	db 7, 0Ah, 0Dh, 'Failed at ', 0
-
-SystemNotFound	db 7, 0Ah, 0Dh, 'System not found.', 0Ah, 0Dh, 0
-
-port_int_fdc:
-                db  48h	 		; ...
-                db  4Ch
-                db  4Eh
-                db  4Dh
-
-port_ext_fdc:
-                db  0Ch
-                db  00h
-                db  08h
-                db  0Ah
-
-
-
 
 proc		sub_FE2D3 near		; ...
                 mov	dh, [ds:dsk_status_4]
@@ -764,6 +805,36 @@ loc_FE48C:				; ...
                 pop	ax
                 retn
 endp		sub_FE483
+
+;--------------------------------------------------------------------------------------------------
+; Print color title bar
+;--------------------------------------------------------------------------------------------------
+proc		print_title	near
+
+                mov	si, Banner
+		xor	dx, dx				; Cursor starts in upper left corner
+		mov	cx, 1				; Character repeat count
+
+                mov 	bl, 01Fh
+@@loop_title:
+		lods   [byte ptr cs:si] 		; Print zero terminated string
+		or	al, al
+		jz	@@done_title			; Terminator in ax?
+		inc	dl				; New cursor position
+		call	color_out_char			; Print character in ax and advance cursor
+		jmp	@@loop_title				;   back for more
+
+@@done_title:
+		mov	cl, 14h				; Repeat trailing space 9 chars
+color_out_char:
+		mov	ah, 09h 			; Write character and attribute
+		int	10h
+		mov	ah, 02h				; Set cursor position
+		int	10h
+		ret
+
+endp	print_title
+
 
 ;---------------------------------------------------------------------------------------------------
 ; Interrupt 69h - Keyboard scan
@@ -1181,30 +1252,12 @@ unk_FE689	db  89h	; ?		; ...
                 db  9Ch	; ?
                 db  81h	; ?
                 db  9Eh	; ?
-; ---------------------------------------------------------------------------
-
-special_rom_detect:				; ...
-                test	[byte ptr es:417h], 3
-                jnz	short read_boot_sector
-                mov	ax, 0E000h
-                out	61h, al		;beep
-                mov	ds, ax
-                assume ds:nothing
-                cmp	[word ptr ds:1FEh], 0AA55h
-                jnz	short no_special_rom_present
-                cmp	[byte ptr ds:20h], 0EAh
-                jz	short no_special_rom_present
-
-jump_to_special_bios:
-                jmpfar	0e000h,0
 ;---------------------------------------------------------------------------------------------------
 ; Interrupt 19h - Warm Boot
 ;---------------------------------------------------------------------------------------------------
 proc		int_19h
                 xor	dx, dx 
                 mov	es, dx
-                jmp	short special_rom_detect
-no_special_rom_present:				; ...
                 mov	dl, 80h
 
 read_boot_sector:
@@ -5082,7 +5135,8 @@ proc		int_6Fh near
                 iret
 endp		int_6Fh
 ; ---------------------------------------------------------------------------
-                db    272 dup (0) ; Free Space
+		db 79 dup (0)
+
 ;--------------------------------------------------------------------------------------------------
 ; Power-On Entry Point
 ;--------------------------------------------------------------------------------------------------
@@ -5090,11 +5144,10 @@ proc		power	far				;   CPU begins here on power up
                 jmpfar	0F000h, warm_boot
 endp 		power
 ; ---------------------------------------------------------------------------
-
 ;--------------------------------------------------------------------------------------------------
 ; BIOS Release Date and Signature
 ;--------------------------------------------------------------------------------------------------
-date	db '01/21/96',0
+date	db '12/31/17',0
 		db 0FEh  ; Computer type (XT)
 
 ends		code
