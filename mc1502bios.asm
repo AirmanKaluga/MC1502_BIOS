@@ -250,7 +250,7 @@ Print_Startup_Information:				; ...
 		mov	si, offset TestingSystem
                 call	print_string
                 mov	cx, 14h
-                call	sub_FE247
+                call	print_backspace
                 mov	ax, es
                 mov	ds, ax
                 assume ds:nothing
@@ -277,7 +277,7 @@ loc_FE182:				; ...
                 adc	ah, 0
                 mov	dx, ax
                 mov	cx, 3
-                call	sub_FE247
+                call	print_backspace
                 mov	al, dh
                 call	sub_FE26B
                 mov	al, dl
@@ -386,14 +386,14 @@ endp		print_cpu_fpu
 
 proc		sub_FE21E near		; ...
                 mov	ax, 0FFFFh
-                call	sub_FE238
-                jnz	short locret_FE24E
+                call	mem_test_loop
+                jnz	short sub_exit
                 mov	ax, 0AAAAh
-                call	sub_FE238
-                jnz	short locret_FE24E
+                call	mem_test_loop
+                jnz	short sub_exit
                 mov	ax, 5555h
-                call	sub_FE238
-                jnz	short locret_FE24E
+                call	mem_test_loop
+                jnz	short sub_exit
                 xor	ax, ax
 endp		sub_FE21E ; sp-analysis	failed
 
@@ -401,7 +401,7 @@ endp		sub_FE21E ; sp-analysis	failed
 
 
 
-proc		sub_FE238 near		; ...
+proc		mem_test_loop near		; ...
                 mov	cx, 2000h
                 xor	di, di
                 rep stosw
@@ -409,40 +409,38 @@ proc		sub_FE238 near		; ...
                 xor	di, di
                 repe scasw
                 retn
-endp		sub_FE238
+endp		mem_test_loop
 
 
 
 
 
-proc		sub_FE247 near		; ...
+proc		print_backspace near		; ...
                 mov	ax, 0E08h
 		int	10h		; - VIDEO - WRITE CHARACTER AND	ADVANCE	CURSOR (TTY WRITE)
                                         ; AL = character, BH = display page (alpha modes)
                                         ; BL = foreground color	(graphics modes)
-                loop	sub_FE247
+                loop	print_backspace
 
-locret_FE24E:				; ...
+sub_exit:				; ...
                 retn
-endp		sub_FE247
+endp		print_backspace
 
 
 
 
-
-proc            print_string near               ; ...
+;----------------------------------------------------------------------------------------------------------
+proc            print_string near               
 print_string_loop:
                 lods    [byte ptr cs:si]
                 or      al, al
-                jz      short locret_FE24E
+                jz      short sub_exit
                 mov     ah, 0Eh
-                int     10h             ; - VIDEO - WRITE CHARACTER AND ADVANCE CURSOR (TTY WRITE)
-                                        ; AL = character, BH = display page (alpha modes)
-                                        ; BL = foreground color (graphics modes)
+                int     10h 
                 jmp     short print_string_loop
 endp            print_string
 
-
+;-----------------------------------------------------------------------------------------------------------
 
 
 proc		sub_FE25B near		; ...
