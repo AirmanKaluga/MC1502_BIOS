@@ -506,24 +506,30 @@ endp	print_title
 ;---------------------------------------------------------------------------------------------------
 ; Clear display screen
 ;---------------------------------------------------------------------------------------------------
-proc	clear_screen	near
+proc		clear_screen	near
+	
+		mov	dx, 184Fh			; Lower right corner of scroll
+		xor	cx, cx				; Upper left  corner of scroll
+		mov	ax, 600h			; Blank entire window
+		mov	bh, 7				; Set regular cursor
+		int	10h				; Call video service scroll
+		mov	ah, 2				; Set cursor position
+		xor	dx, dx				;   upper left corner
+		mov	bh, 0				;   page 0
+		int	10h				;   call video service
+		mov	ax, 500h			; Set active display page zero
+		int	10h
+		ret
 
-	mov	dx, 184Fh			; Lower right corner of scroll
-	xor	cx, cx				; Upper left  corner of scroll
-	mov	ax, 600h			; Blank entire window
-	mov	bh, 7				; Set regular cursor
-	int	10h				; Call video service scroll
-	mov	ah, 2				; Set cursor position
-	xor	dx, dx				;   upper left corner
-	mov	bh, 0				;   page 0
-	int	10h				;   call video service
-	mov	ax, 500h			; Set active display page zero
-	int	10h
-	ret
+endp		clear_screen
 
-endp	clear_screen
+;---------------------------------------------------------------------------------------------------
+; Saerch additional rom
+;---------------------------------------------------------------------------------------------------
+
 
 proc		search_rom	near
+
                 push    bx
                 push    cx
                 push    dx
@@ -566,30 +572,30 @@ endp		search_rom
 ;--------------------------------------------------------------------------------------------------
 ; PC speaker beep (length in bl)
 ;--------------------------------------------------------------------------------------------------
-proc	beep	near
+proc		beep	near
 
-	push	ax
-	push	cx
-	mov	al, 10110110b			; Timer IC 8253 square waves
-	out	43h, al 			;   channel 2, speaker
-	mov	ax, 528h			; Get countdown constant word
-	out	42h, al 			;   send low order
-	mov	al, ah				;   load high order
-	out	42h, al 			;   send high order
-	in	al, 61h 			; Read IC 8255 machine status
-	push	ax
-	or	al, 00000011b
-	out	61h, al 			; Turn speaker on
-	xor	cx, cx
+		push	ax
+		push	cx
+		mov	al, 10110110b			; Timer IC 8253 square waves
+		out	43h, al 			;   channel 2, speaker
+		mov	ax, 528h			; Get countdown constant word
+		out	42h, al 			;   send low order
+		mov	al, ah				;   load high order
+		out	42h, al 			;   send high order
+		in	al, 61h 			; Read IC 8255 machine status
+		push	ax
+		or	al, 00000011b
+		out	61h, al 			; Turn speaker on
+		xor	cx, cx
 @@delay:
-	loop	@@delay
-	dec	bl
-	jnz	@@delay
-	pop	ax
-	out	61h, al 			; Turn speaker off
-	pop	cx
-	pop	ax
-	ret
+		loop	@@delay
+		dec	bl
+		jnz	@@delay
+		pop	ax
+		out	61h, al 			; Turn speaker off
+		pop	cx
+		pop	ax
+		ret
 
 endp	beep
 
