@@ -3030,39 +3030,16 @@ loc_FF032:				; ...
                 jmp	short loc_FF00E
 
 ; ---------------------------------------------------------------------------
-include int10.asm ; Interrupt 10h handlers
+include int10h.asm ; Interrupt 10h handlers
 ; ---------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-; Interrupt 12h - Memory Size
+include int12h.asm ;Memory Size
 ;---------------------------------------------------------------------------------------------------
-proc		int_12h near
-                sti
-                push	ds
-                mov	ax, BDAseg
-                mov	ds, ax
-                assume ds:nothing
-                mov	ax, [ds:main_ram_size_]
-                pop	ds
-                assume ds:nothing
-                iret
-endp		int_12h
 
 ;---------------------------------------------------------------------------------------------------
-; Interrupt 11h - Equipment Check
+include int11h.asm  ;Equipment Check
 ;---------------------------------------------------------------------------------------------------
-proc		int_11h near
-                sti
-                push	ds
-                mov	ax, BDAseg
-                mov	ds, ax
-                assume ds:nothing
-                mov	ax, [ds:equip_bits_]
-                pop	ds
-                assume ds:nothing
-                iret
-endp		int_11h
-; ---------------------------------------------------------------------------
 proc 		int_1Ah near
                 push	ds
                 push	ax

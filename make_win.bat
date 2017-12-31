@@ -2,7 +2,6 @@
 
 set bios=mc1502bios
 
-
 if exist %bios%.obj del %bios%.obj
 if exist %bios%.lst del %bios%.lst
 if exist %bios%.exe del %bios%.exe
