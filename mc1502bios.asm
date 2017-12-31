@@ -8,59 +8,11 @@ macro	jmpfar	segm, offs
         db	0EAh;
         dw	offs, segm
 endm
+
 ;---------------------------------------------------------------------------------------------------
-; Line feed and carriage return
-LF	equ	0Ah
-CR	equ	0Dh
+include	var.asm	;Variables
+;---------------------------------------------------------------------------------------------------
 
-BDAseg equ 040h
-
-equip_bits_ equ 010h
-main_ram_size_ equ 013h
-keybd_flags_1_ equ 017h
-keybd_flags_2_ equ 018h
-keybd_alt_num_ equ 019h
-keybd_q_head_ equ 01Ah
-keybd_q_tail_ equ 01Ch
-keybd_break_ equ 071h
-
-dsk_recal_stat equ 03Eh
-dsk_motor_stat equ 03Fh
-dsk_motor_tmr equ 040h
-dsk_ret_code_ equ 041h
-dsk_status_1 equ 042h
-dsk_status_2 equ 043h
-dsk_status_3 equ 044h
-dsk_status_4 equ 045h
-dsk_status_5 equ 046h
-dsk_status_7 equ 048h
-dsk_motor_stat_ equ 043Fh
-
-video_mode_ equ 049h
-video_columns_ equ 04Ah
-video_buf_siz_ equ 04Ch 
-video_pag_off_ equ 04Eh
-vid_curs_pos0_ equ 050h
-
-vid_curs_mode_ equ 060h
-video_page_ equ 062h
-video_port_ equ 063h
-video_mode_reg_ equ 065h
-video_color_ equ 066h
-
-gen_use_ptr_ equ 067h
-gen_use_seg_ equ 069h
-gen_int_occurd_ equ 06Bh
-
-timer_low_ equ 06Ch
-timer_hi_ equ 06Eh
-timer_rolled_ equ 070h
-
-warm_boot_flag_ equ 072h
-prn_timeout_1_ equ 078h
-rs232_timeout1_ equ 07Ch
-
-; ===========================================================================
 
 ; Segment type:	Pure code
 segment		code byte public 'CODE'
@@ -70,7 +22,7 @@ segment		code byte public 'CODE'
 
 
 Banner:
-	        db 'Elektronika MS 1502 BIOS Version 7.3 - 01/12/2018', 0
+	        db 'Elektronika MS 1502 BIOS Version 7.3 - 31/12/2017', 0
 
 Copiright:	
 		db LF, CR, 7, "Updated Airman and RUS", LF, CR, 0
@@ -111,6 +63,26 @@ baud:
                 dw    034h
                 dw    01Ah
                 dw    00Dh
+BDA:
+
+rs232_1:	dw    3F8h
+rs232_2:	dw    2F8h
+rs232_3:	dw    0
+rs232_4:	dw    0
+lpt_1:		dw    378h
+lpt_2:		dw    278h
+lpt_3:		dw    0
+bios_data_seg:	dw    0
+equip_bit:	dw    626Dh
+manufact_test:	db    0
+main_ram_size:	dw    0
+error_codes:	dw    40h
+kb_flag_1:	db    0
+kb_flag_2:	db    0
+kb_alt_num:	db    0
+kb_q_head:	dw  1Eh
+kb_q_tail:	dw  1Eh
+kb_queue:	dw  1Eh
 
 
 ; ---------------------------------------------------------------------------
@@ -835,59 +807,15 @@ color_out_char:
 endp	print_title
 
 ;---------------------------------------------------------------------------------------------------
-; Interrupt 19h - Warm Boot
+include int19h.asm 	; Warm Boot
 ;---------------------------------------------------------------------------------------------------
-proc		int_19h
-                xor	dx, dx 
-                mov	es, dx
-                mov	dl, 80h
 
-read_boot_sector:
-				; ...
-                mov	cx, 3
-
-read_boot_sector_loop:				; ...
-                push	cx
-                mov	ah, dh
-                int	13h		; DISK - RESET DISK SYSTEM
-                                        ; DL = drive (if bit 7 is set both hard	disks and floppy disks reset)
-                jb	short error_disk_system_on_boot
-                mov	bx, 7C00h
-                mov	cx, 1
-                mov	ax, 201h
-                int	13h		; DISK - READ SECTORS INTO MEMORY
-                                        ; AL = number of sectors to read, CH = track, CL = sector
-                                        ; DH = head, DL	= drive, ES:BX -> buffer to fill
-                                        ; Return: CF set on error, AH =	status,	AL = number of sectors read
-                pop	cx
-                jnb	short try
-                loop	read_boot_sector_loop
-
-error_disk_system_on_boot:.
-                shl	dl, 1
-                jb	short read_boot_sector
-                test	[byte ptr es:dsk_motor_stat_], 40h
-                jnz	short System_not_found
-                or	[byte ptr es:dsk_motor_stat_], 40h
-                jmp	short read_boot_sector
-; ---------------------------------------------------------------------------
-
-System_not_found:				; ...
-                mov	si, offset SystemNotFound
-                call	print_string
-                sti
-
-System_boot_stop_loop:				; ...
-                jmp	short System_boot_stop_loop
-; ---------------------------------------------------------------------------
-
-try:				; ...
-                cmp	[word ptr es:7DFEh], 0AA55h
-                jnz	short error_disk_system_on_boot
-                jmpfar 0,7C00h
-endp		int_19h
 ;---------------------------------------------------------------------------------------------------
 include int09h.asm 	; Keyboard Services IRQ1
+;---------------------------------------------------------------------------------------------------
+
+;---------------------------------------------------------------------------------------------------
+include int16h.asm 	; Keyboard
 ;---------------------------------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
@@ -895,421 +823,50 @@ include int14h.asm 	; RS232 Service
 ;---------------------------------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-; Interrupt 16h - Keyboard
-;---------------------------------------------------------------------------------------------------
-proc		int_16h
-                sti
-                push	ds
-                push	bx
-                mov	bx, BDAseg
-                mov	ds, bx
-                assume ds:nothing
-                or	ah, ah
-                jz	short loc_FE845
-                dec	ah
-                jz	short loc_FE85E
-                dec	ah
-                jz	short loc_FE86F
-                pop	bx
-                pop	ds
-                assume ds:nothing
-                iret
-endp		int_16h
-; ---------------------------------------------------------------------------
-
-loc_FE845:				; ...
-                cli
-                mov	bx, [ds:keybd_q_head_]
-                cmp	bx, [ds:keybd_q_tail_]
-                sti
-                jz	short loc_FE845
-                mov	ax, [bx]
-                call	sub_FE5E8
-                mov	[ds:keybd_q_head_], bx
-                pop	bx
-                pop	ds
-                iret
-; ---------------------------------------------------------------------------
-
-loc_FE85E:				; ...
-                cli
-                mov	bx, [ds:keybd_q_head_]
-                cmp	bx, [ds:keybd_q_tail_]
-                mov	ax, [bx]
-                sti
-                pop	bx
-                pop	ds
-                retf	2
-; ---------------------------------------------------------------------------
-
-loc_FE86F:				; ...
-                mov	al, [ds:keybd_flags_1_]
-                pop	bx
-                pop	ds
-                iret
-
-
-
-proc		sub_FE875 near		; ...
-                add	bx, 2
-
-                cmp	bx, 0x003E
-                jnz	short locret_FE881
-                mov	bx, 1Eh
-endp		sub_FE875 ; sp-analysis	failed
-
-
-locret_FE881:				; ...
-                retn
-; ---------------------------------------------------------------------------
-unk_FE882	db  52h	; R		; ...
-unk_FE883	db  3Ah	; :		; ...
-                db  45h	; E
-                db  46h	; F
-                db  38h	; 8
-                db  1Dh
-                db  2Ah	; *
-                db  36h	; 6
-data_31		db  80h	;
-                db  40h	; @
-                db  20h
-                db  10h
-                db    8
-                db    4
-                db    2
-                db    1
-unk_FE892	db  1Bh			; ...
-                db 0FFh
-                db    0
-                db 0FFh
-                db 0FFh
-                db 0FFh
-                db  1Eh
-                db 0FFh
-                db 0FFh
-                db 0FFh
-                db 0FFh
-                db  1Fh
-                db 0FFh
-                db  7Fh	;
-                db 0FFh
-                db  11h
-                db  17h
-                db    5
-                db  12h
-                db  14h
-                db  19h
-                db  15h
-                db    9
-                db  0Fh
-                db  10h
-                db  1Bh
-                db  1Dh
-                db  0Ah
-                db 0FFh
-                db    1
-                db  13h
-                db    4
-                db    6
-                db    7
-                db    8
-                db  0Ah
-                db  0Bh
-                db  0Ch
-                db 0FFh
-                db 0FFh
-                db 0FFh
-                db 0FFh
-                db  1Ch
-                db  1Ah
-                db  18h
-                db    3
-                db  16h
-                db    2
-                db  0Eh
-                db  0Dh
-                db 0FFh
-                db 0FFh
-                db 0FFh
-                db 0FFh
-                db 0FFh
-                db 0FFh
-                db  20h
-                db 0FFh
-unk_FE8CC	db  5Eh	; ^		; ...
-                db  5Fh	; _
-                db  60h	; `
-                db  61h	; a
-                db  62h	; b
-                db  63h	; c
-                db  64h	; d
-                db  65h	; e
-                db  66h	; f
-                db  67h	; g
-                db 0FFh
-                db 0FFh
-                db  77h	; w
-                db 0FFh
-                db  84h	;
-                db 0FFh
-                db  73h	; s
-                db 0FFh
-                db  74h	; t
-                db 0FFh
-                db  75h	; u
-                db 0FFh
-                db  76h	; v
-                db 0FFh
-                db 0FFh
-unk_FE8E5	db  1Bh			; ...
-                db  31h	; 1
-                db  32h	; 2
-                db  33h	; 3
-                db  34h	; 4
-                db  35h	; 5
-                db  36h	; 6
-                db  37h	; 7
-                db  38h	; 8
-                db  39h	; 9
-                db  30h	; 0
-                db  2Dh	; -
-                db  3Dh	; =
-                db    8
-                db    9
-                db  71h	; q
-                db  77h	; w
-                db  65h	; e
-                db  72h	; r
-                db  74h	; t
-                db  79h	; y
-                db  75h	; u
-                db  69h	; i
-                db  6Fh	; o
-                db  70h	; p
-                db  5Bh	; [
-                db  5Dh	; ]
-                db  0Dh
-                db 0FFh
-                db  61h	; a
-                db  73h	; s
-                db  64h	; d
-                db  66h	; f
-                db  67h	; g
-                db  68h	; h
-                db  6Ah	; j
-                db  6Bh	; k
-                db  6Ch	; l
-                db  3Bh	; ;
-                db  27h	; '
-                db  60h	; `
-                db 0FFh
-                db  5Ch	; \
-                db  7Ah	; z
-                db  78h	; x
-                db  63h	; c
-                db  76h	; v
-                db  62h	; b
-                db  6Eh	; n
-                db  6Dh	; m
-                db  2Ch	; ,
-                db  2Eh	; .
-                db  2Fh	; /
-                db 0FFh
-                db  2Ah	; *
-                db 0FFh
-                db  20h
-                db 0FFh
-unk_FE91F	db  1Bh	; ...
-                db  21h	; !
-                db  40h	; @
-                db  23h	; #
-                db  24h	; $
-                db  25h	; %
-                db  5Eh	; ^
-                db  26h	; &
-                db  2Ah	; *
-                db  28h	; (
-                db  29h	; )
-                db  5Fh	; _
-                db  2Bh	; +
-                db    8
-                db    0
-                db  51h	; Q
-                db  57h	; W
-                db  45h	; E
-                db  52h	; R
-                db  54h	; T
-                db  59h	; Y
-                db  55h	; U
-                db  49h	; I
-                db  4Fh	; O
-                db  50h	; P
-                db  7Bh	; {
-                db  7Dh	; }
-                db  0Dh
-                db 0FFh
-                db  41h	; A
-                db  53h	; S
-                db  44h	; D
-                db  46h	; F
-                db  47h	; G
-                db  48h	; H
-                db  4Ah	; J
-                db  4Bh	; K
-                db  4Ch	; L
-                db  3Ah	; :
-                db  22h	; "
-                db  7Eh	; ~
-                db 0FFh
-                db  7Ch	; |
-                db  5Ah	; Z
-                db  58h	; X
-                db  43h	; C
-                db  56h	; V
-                db  42h	; B
-                db  4Eh	; N
-                db  4Dh	; M
-                db  3Ch	; <
-                db  3Eh	; >
-                db  3Fh	; ?
-                db 0FFh
-                db    0
-                db 0FFh
-                db  20h
-                db 0FFh
-unk_FE959	db  54h	; T		; ...
-                db  55h	; U
-                db  56h	; V
-                db  57h	; W
-                db  58h	; X
-                db  59h	; Y
-                db  5Ah	; Z
-                db  5Bh	; [
-                db  5Ch	; \
-                db  5Dh	; ]
-unk_FE963	db  68h	; h		; ...
-                db  69h	; i
-                db  6Ah	; j
-                db  6Bh	; k
-                db  6Ch	; l
-                db  6Dh	; m
-                db  6Eh	; n
-                db  6Fh	; o
-                db  70h	; p
-                db  71h	; q
-unk_FE96D	db  37h	; 7		; ...
-                db  38h	; 8
-                db  39h	; 9
-                db  2Dh	; -
-                db  34h	; 4
-                db  35h	; 5
-                db  36h	; 6
-                db  2Bh	; +
-                db  31h	; 1
-                db  32h	; 2
-                db  33h	; 3
-                db  30h	; 0
-                db  2Eh	; .
-unk_FE97A	db  47h	; G		; ...
-                db  48h	; H
-                db  49h	; I
-                db 0FFh
-                db  4Bh	; K
-                db 0FFh
-                db  4Dh	; M
-                db 0FFh
-                db  4Fh	; O
-; ---------------------------------------------------------------------------
-                push	ax  ; TODO Unknown PUSH
-                push	cx
-                push	dx
-                push	bx
-
-;---------------------------------------------------------------------------------------------------
-include int13h.asm 	;Floppydisk
+include int13h.asm 	; Floppydisk
 ;---------------------------------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-include int1Eh.asm 	;Diskette Parameter Table
+include int1Eh.asm 	; Diskette Parameter Table
 ;---------------------------------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-include int17h.asm 	;Parallel LPT Services
+include int17h.asm 	; Parallel LPT Services
 ;---------------------------------------------------------------------------------------------------
 
-; ---------------------------------------------------------------------------
+; --------------------------------------------------------------------------------------------------
 include int10h.asm 	; Interrupt 10h handlers
-; ---------------------------------------------------------------------------
+; --------------------------------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-include int12h.asm 	;Memory Size
+include int12h.asm 	; Memory Size
 ;---------------------------------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-include int11h.asm  	;Equipment Check
+include int11h.asm  	; Equipment Check
 ;---------------------------------------------------------------------------------------------------
 
-; ---------------------------------------------------------------------------
-include int1Ah.asm	 ;Real Time Clock Function;
-; ---------------------------------------------------------------------------
+; --------------------------------------------------------------------------------------------------
+include int1Ah.asm	; Real Time Clock Function
+; --------------------------------------------------------------------------------------------------
 
-; ---------------------------------------------------------------------------
-include int08h.asm	 ;IRQ0;
-; ---------------------------------------------------------------------------
+; --------------------------------------------------------------------------------------------------
+include int08h.asm	; IRQ0;
+; --------------------------------------------------------------------------------------------------
 
-; ---------------------------------------------------------------------------
-int_vec_table_1:
-                dw offset int_08h         ; Offest int_08h
-                dw offset int_09h         ; Offset int_09h
-                dw offset dummy_int       ; Offset int_0Ah
-                dw offset dummy_int       ; Ofsset int_0Bh
-                dw offset dummy_int       ; Offset int_0Ch
-                dw offset dummy_int       ; Offset int_0Dh
-                dw offset dummy_int       ; Offset int_0Eh
-                dw offset dummy_int       ; Offset int_0Fh
-                dw offset int_10h         ; Offset int_10h
-                dw offset int_11h         ; Ofsset int_11h
-                dw offset int_12h         ; Offset int_12h
-                dw offset int_13h         ; Offset int_13h
-                dw offset int_14h         ; Offset int_14h
-                dw offset dummy_int       ; Offset int_15h
-                dw offset int_16h         ; Offset int_16h
-                dw offset int_17h         ; Offset int_17h
-                dw offset dummy_int       ; Offset int_18h
-                dw offset int_19h         ; Offset int_19h
-                dw offset int_1Ah	  ; Offset int_1Ah
-                dw offset dummy_int       ; Offset int_1Bh
-                dw offset dummy_int       ; Offset int_1Ch
-                dw offset int_1Dh	  ; Offset int_1Dh
-                dw offset int_1Eh         ; Offset int_1Eh
-
-BDA:
-
-rs232_1:	dw    3F8h
-rs232_2:	dw    2F8h
-rs232_3:	dw    0
-rs232_4:	dw    0
-lpt_1:		dw    378h
-lpt_2:		dw    278h
-lpt_3:		dw    0
-bios_data_seg:	dw    0
-equip_bit:	dw    626Dh
-manufact_test:	db    0
-main_ram_size:	dw    0
-error_codes:	dw    40h
-kb_flag_1:	db    0
-kb_flag_2:	db    0
-kb_alt_num:	db    0
-kb_q_head:	dw  1Eh
-kb_q_tail:	dw  1Eh
-kb_queue:	dw  1Eh
-
-; ---------------------------------------------------------------------------
-include dummy.asm  ;Dummy interrupt
-;----------------------------------------------------------------------------
+; --------------------------------------------------------------------------------------------------
+include dummy.asm  	;Dummy interrupt
 ;---------------------------------------------------------------------------------------------------
-include int05h.asm  ;Print Screen
+
 ;---------------------------------------------------------------------------------------------------
+include int05h.asm  	;Print Screen
+;---------------------------------------------------------------------------------------------------
+
+;---------------------------------------------------------------------------------------------------
+include vectors.asm  	;Interrupt vector tables
+;---------------------------------------------------------------------------------------------------
+
+
 
 
 ;--------------------------------------------------------------------------------------------------
@@ -1338,7 +895,7 @@ endp		print_cr_lf
 proc		power	far				;   CPU begins here on power up
                 jmpfar	0F000h, warm_boot
 endp 		power
-; ---------------------------------------------------------------------------
+
 ;--------------------------------------------------------------------------------------------------
 ; BIOS Release Date and Signature
 ;--------------------------------------------------------------------------------------------------
