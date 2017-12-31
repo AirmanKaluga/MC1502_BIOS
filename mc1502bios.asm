@@ -402,10 +402,10 @@ endp		sub_FE21E ; sp-analysis	failed
 
 
 proc		mem_test_loop near		; ...
-                mov	cx, 2000h
+                mov	cx, mem_test_cicle_count
                 xor	di, di
                 rep stosw
-                mov	cx, 2000h
+                mov	cx, mem_test_cicle_count
                 xor	di, di
                 repe scasw
                 retn
