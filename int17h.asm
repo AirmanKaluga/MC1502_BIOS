@@ -130,3 +130,21 @@ loc_FF032:				; ...
                                         ; 6: 0=hold keyboard clock low
                                         ; 7: 0=enable kbrd
                 jmp	short loc_FF00E
+
+;--------------------------------------------------------------------------------------------------
+; Prints CR+LF on the printer
+;--------------------------------------------------------------------------------------------------
+proc    	print_cr_lf     near
+                xor	dx, dx
+                xor	ah, ah
+                mov	al, LF
+                int	17h		; PRINTER - OUTPUT CHARACTER
+                                        ; AL = character, DX = printer port (0-3)
+                                        ; Return: AH = status bits
+                xor	ah, ah
+                mov	al, CR
+                int	17h		; PRINTER - OUTPUT CHARACTER
+                                        ; AL = character, DX = printer port (0-3)
+                                        ; Return: AH = status bits
+                retn
+endp		print_cr_lf

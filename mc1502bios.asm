@@ -44,9 +44,9 @@ date_full:
 str_cpu:
 		db LF, CR, LF, CR, 'Main processor: ', 0
 str_8088:
-	 	db 'Intel 8088 5.33Mhz', LF, CR, 0
+	 	db 'Intel 8088 5.33Mhz', 0
 str_v20:                                                  	
-		db 'NEC V20 5.33Mhz', LF, CR, 0
+		db 'NEC V20 5.33Mhz ', 0
 str_8087:
 		db ' with Intel (C) 8087 FPU', 0
 
@@ -250,10 +250,10 @@ Print_Startup_Information:				; ...
                 mov	al, 0FCh
                 out	21h, al		; Interrupt controller,	8259A.
                 sti
-
-                mov	ax, 3
-                int	10h		; - VIDEO - SET	VIDEO MODE
-			                ; AL = mode
+		mov 	ax, 3
+		int 	10h
+		;call	video_init
+		
 		call	clear_screen
 		call	print_title
                 mov 	si, offset Copiright
@@ -569,6 +569,10 @@ include int1Eh.asm 	; Diskette Parameter Table
 include int17h.asm 	; Parallel LPT Services
 ;---------------------------------------------------------------------------------------------------
 
+;---------------------------------------------------------------------------------------------------
+include int1Dh.asm	; Video parametr Table
+;---------------------------------------------------------------------------------------------------
+
 ; --------------------------------------------------------------------------------------------------
 include int10h.asm 	; Interrupt 10h handlers
 ; --------------------------------------------------------------------------------------------------
@@ -598,33 +602,12 @@ include int05h.asm  	;Print Screen
 ;---------------------------------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-include vectors.asm  	;Interrupt vector tables
+include gfx.asm		; Grafic charapter table
 ;---------------------------------------------------------------------------------------------------
 
-
-
-
-;--------------------------------------------------------------------------------------------------
-; Prints CR+LF on the printer
-;--------------------------------------------------------------------------------------------------
-proc    	print_cr_lf     near
-                xor	dx, dx
-                xor	ah, ah
-                mov	al, LF
-                int	17h		; PRINTER - OUTPUT CHARACTER
-                                        ; AL = character, DX = printer port (0-3)
-                                        ; Return: AH = status bits
-                xor	ah, ah
-                mov	al, CR
-                int	17h		; PRINTER - OUTPUT CHARACTER
-                                        ; AL = character, DX = printer port (0-3)
-                                        ; Return: AH = status bits
-                retn
-endp		print_cr_lf
-
-;--------------------------------------------------------------------------------------------------
-;include _empty.asm	;Empty space
-;--------------------------------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+include vectors.asm  	;Interrupt vector tables
+;---------------------------------------------------------------------------------------------------
 
 ;--------------------------------------------------------------------------------------------------
 ; Power-On Entry Point  

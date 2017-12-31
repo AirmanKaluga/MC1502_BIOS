@@ -865,4 +865,3 @@ unk_FEF97:
                 db  1Ch
                 db  1Ah
                 db  1Eh
-                db  32 dup (0)
