@@ -3030,48 +3030,19 @@ loc_FF032:				; ...
                 jmp	short loc_FF00E
 
 ; ---------------------------------------------------------------------------
-include int10h.asm ; Interrupt 10h handlers
+include int10h.asm 	; Interrupt 10h handlers
 ; ---------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-include int12h.asm ;Memory Size
+include int12h.asm 	;Memory Size
 ;---------------------------------------------------------------------------------------------------
 
 ;---------------------------------------------------------------------------------------------------
-include int11h.asm  ;Equipment Check
+include int11h.asm  	;Equipment Check
 ;---------------------------------------------------------------------------------------------------
-proc 		int_1Ah near
-                push	ds
-                push	ax
-                mov	ax, BDAseg
-                mov	ds, ax
-                assume ds:nothing
-                pop	ax
-                or	ah, ah
-                jz	short loc_FFE80
-                dec	ah
-                jz	short loc_FFE92
 
-loc_FFE7E:				; ...
-                pop	ds
-                assume ds:nothing
-                iret
-endp		int_1Ah
 ; ---------------------------------------------------------------------------
-
-loc_FFE80:				; ...
-                mov	al, [ds:timer_rolled_]
-                mov	[byte ptr ds:timer_rolled_], 0
-                mov	cx, [ds:timer_hi_]
-                mov	dx, [ds:timer_low_]
-                jmp	short loc_FFE7E
-; ---------------------------------------------------------------------------
-
-loc_FFE92:				; ...
-                mov	[ds:timer_low_], dx
-                mov	[ds:timer_hi_], cx
-                mov	[byte ptr ds:timer_rolled_], 0
-                jmp	short loc_FFE7E
+include int1Ah.asm	 ;Real Time Clock Function;
 ; ---------------------------------------------------------------------------
 proc		int_08h near
                 push	ds
