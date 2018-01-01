@@ -41,12 +41,16 @@ System_not_found:				; ...
                 call	print_string
                 sti
 
-System_boot_stop_loop:				; ...
-                jmp	short System_boot_stop_loop
+		mov	si, offset str_ins_disk		; Load disk message
+		call	print_string			;   and print string
+		call	get_key				;   wait for keypress
+		call	clear_screen
+		call	int_19h
 ; ---------------------------------------------------------------------------
 
 try:				; ...
                 cmp	[word ptr es:7DFEh], 0AA55h
                 jnz	short error_disk_system_on_boot
                 jmpfar 0,7C00h
+
 endp		int_19h

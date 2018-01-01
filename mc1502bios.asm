@@ -1,4 +1,4 @@
-BOOT_DELAY	= 3		; Seconds to wait after memory test (keypress will bypass)
+BOOT_DELAY	= 5		; Seconds to wait after memory test (keypress will bypass)
 
 	Ideal
 	model small ; produce .EXE file then truncate it
@@ -59,6 +59,14 @@ FailedAt:
 SystemNotFound:
 		db  LF, CR, 'System not found.', LF, CR, 0
 
+str_ega_vga:
+		db LF, CR, 'EGA/VGA Video card Installed', 0
+str_cga:
+		db LF, CR, 'CGA Video card installed', 0
+
+str_ins_disk:	db 'Insert BOOT disk in A:', CR, LF
+		db 'Press any key when ready', CR, LF, LF, 0
+
 port_int_fdc:
                 db  48h	 		; ...
                 db  4Ch
@@ -84,11 +92,11 @@ baud:
 BDA:
 
 rs232_1:	dw    3F8h
-rs232_2:	dw    2F8h
+rs232_2:	dw    0
 rs232_3:	dw    0
 rs232_4:	dw    0
-lpt_1:		dw    378h
-lpt_2:		dw    278h
+lpt_1:		dw    62h
+lpt_2:		dw    0
 lpt_3:		dw    0
 bios_data_seg:	dw    0
 equip_bit:	dw    622Dh
@@ -233,6 +241,13 @@ init_fdc_BDA:				; ...
                 mov	ds, ax
                 assume ds:nothing
 		call	search_rom
+		mov	ah, 12h				; Test for EGA/VGA
+		mov	bx, 0FF10h
+		int	10h				; Video Get EGA Info
+		cmp	bh, 0FFh			; If EGA or later present BH != FFh
+		je	test_first_8K_ram
+		and	[byte ds:10h], 11001111b	; Set video flag in equipment list to EGA/VGA
+
 test_first_8K_ram:				; ...
                 mov	ax, [bx]
                 not	ax
@@ -272,7 +287,8 @@ Print_Startup_Info:				; ...
 		mov	si, offset TestingSystem
                 call	print_string
                 mov	cx, 4h
-                call	print_backspace
+		mov 	al, 08h
+                call	print_symbol
                 mov	ax, es
                 mov	ds, ax
                 assume ds:nothing
@@ -299,7 +315,8 @@ Mem_test:				; ...
                 adc	ah, 0
                 mov	dx, ax
                 mov	cx, 3
-                call	print_backspace
+		mov 	al, 08h
+                call	print_symbol
                 mov	al, dh
                 call	sub_FE26B
                 mov	al, dl
@@ -310,11 +327,24 @@ Mem_test:				; ...
 
                 mov	si, empty_string
                 call	print_string
-                xor	cx, cx
+
+		mov	al, [es:10h]			; Check equipment word
+		and	al, 00110000b			; Is it EGA/VGA?
+		jnz	@@is_cga			; No, we have CGA
+		mov	si, offset str_ega_vga		; Otherwise we have EGA/VGA
+		jmp	short @@display_video
+@@is_cga:
+		mov	si, offset str_cga
+@@display_video:
+		call	print_string				; Print video adapter present
+
 
 		mov	ax, 1Eh				; Flush keyboard buffer in case user
 		mov	[es:1Ah], ax			;   was mashing keys during memory test
 		mov	[es:1Ch], ax
+       		call	clear_screen
+		mov	bx, BOOT_DELAY * 18		; Get ticks to pause at 18.2 Hz
+		call	delay_keypress
 
                 int	19h		; DISK BOOT
                                         ; causes reboot	of disk	system
@@ -410,16 +440,16 @@ fpu:		mov	ax, BDAseg
 
 endp		print_cpu_fpu
 ;-------------------------------------------------------------------------------------------------------
-proc		print_backspace near		; ...
-                mov	ax, 0E08h
+proc		print_symbol near		; ...
+                mov	ah, 0Eh
 		int	10h		; - VIDEO - WRITE CHARACTER AND	ADVANCE	CURSOR (TTY WRITE)
                                         ; AL = character, BH = display page (alpha modes)
                                         ; BL = foreground color	(graphics modes)
-                loop	print_backspace
+                loop	print_symbol
 
 sub_exit:				; ...
                 retn
-endp		print_backspace
+endp		print_symbol
 
 
 
@@ -523,6 +553,34 @@ proc		clear_screen	near
 
 endp		clear_screen
 
+;--------------------------------------------------------------------------------------------------
+; Delay number of clock ticks in bx, unless a key is pressed first (return ASCII code in al)
+;--------------------------------------------------------------------------------------------------
+proc	delay_keypress	near
+
+	sti					; Enable interrupts so timer can run
+	add	bx, [es:46Ch]			; Add pause ticks to current timer ticks
+						;   (0000:046C = 0040:006C)
+@@delay:
+	mov	ah, 01h
+	int	16h				; Check for keypress
+	jnz	@@keypress			; End pause if key pressed
+
+	mov	cx, [es:46Ch]			; Get current ticks
+	sub	cx, bx				; See if pause is up yet
+	jc	@@delay				; Nope
+
+@@done:
+	cli					; Disable interrupts
+	ret
+
+@@keypress:
+	xor	ah, ah
+	int	16h				; Flush keystroke from buffer
+	jmp	short @@done
+
+endp	delay_keypress
+
 ;---------------------------------------------------------------------------------------------------
 ; Saerch additional rom
 ;---------------------------------------------------------------------------------------------------
@@ -598,6 +656,17 @@ proc		beep	near
 		ret
 
 endp	beep
+
+;--------------------------------------------------------------------------------------------------
+; Waits for a keypress and then returns it (ah=scan code, al=ASCII)
+;--------------------------------------------------------------------------------------------------
+proc	get_key	near
+
+	mov	ah, 0				; Read keyboard key
+	int	16h
+	ret
+
+endp	get_key
 
 ;---------------------------------------------------------------------------------------------------
 include int19h.asm 	; Warm Boot
