@@ -73,7 +73,5 @@ goto end
 :end
 if exist %bios%.obj del %bios%.obj
 if exist %bios%.exe del %bios%.exe
-
 set bios=
-
 pause

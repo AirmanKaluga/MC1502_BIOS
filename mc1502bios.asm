@@ -60,9 +60,9 @@ SystemNotFound:
 		db  LF, CR, 'System not found.', LF, CR, 0
 
 str_ega_vga:
-		db LF, CR, 'EGA/VGA Video card Installed', 0
+		db LF, CR, LF, CR, 'EGA/VGA Video card Installed', LF, CR, 0
 str_cga:
-		db LF, CR, 'CGA Video card installed', 0
+		db LF, CR, LF, CR, 'CGA Video card installed', LF, CR, 0
 
 str_ins_disk:	db 'Insert BOOT disk in A:', CR, LF
 		db 'Press any key when ready', CR, LF, LF, 0
@@ -241,12 +241,6 @@ init_fdc_BDA:				; ...
                 mov	ds, ax
                 assume ds:nothing
 		call	search_rom
-		mov	ah, 12h				; Test for EGA/VGA
-		mov	bx, 0FF10h
-		int	10h				; Video Get EGA Info
-		cmp	bh, 0FFh			; If EGA or later present BH != FFh
-		je	test_first_8K_ram
-		and	[byte ds:10h], 11001111b	; Set video flag in equipment list to EGA/VGA
 
 test_first_8K_ram:				; ...
                 mov	ax, [bx]
@@ -271,9 +265,9 @@ Print_Startup_Info:				; ...
                 out	21h, al		; Interrupt controller,	8259A.
                 sti
 		mov	bl ,1
+
 		call 	beep
 		call	video_init
-		call	clear_screen
 		call	print_title
                 mov 	si, offset Copiright
 		call	print_string
@@ -283,12 +277,11 @@ Print_Startup_Info:				; ...
 		call	print_string
 
 		call	print_cpu_fpu
-		
+		call	video_type		
 		mov	si, offset TestingSystem
                 call	print_string
                 mov	cx, 4h
-		mov 	al, 08h
-                call	print_symbol
+                call	print_backspace
                 mov	ax, es
                 mov	ds, ax
                 assume ds:nothing
@@ -315,8 +308,7 @@ Mem_test:				; ...
                 adc	ah, 0
                 mov	dx, ax
                 mov	cx, 3
-		mov 	al, 08h
-                call	print_symbol
+                call	print_backspace
                 mov	al, dh
                 call	sub_FE26B
                 mov	al, dl
@@ -325,27 +317,22 @@ Mem_test:				; ...
                 cmp	bx, [ds:main_ram_size_]
                 jb      short  Mem_test_loop
 
+Boot:
                 mov	si, empty_string
                 call	print_string
+		mov	cx, 04h
+super_delay:
+		push 	cx
+		mov 	cx, 0FFFFh
+boot_delay:	
+		loop 	boot_delay
+		pop 	cx
+		loop	super_delay
 
-		mov	al, [es:10h]			; Check equipment word
-		and	al, 00110000b			; Is it EGA/VGA?
-		jnz	@@is_cga			; No, we have CGA
-		mov	si, offset str_ega_vga		; Otherwise we have EGA/VGA
-		jmp	short @@display_video
-@@is_cga:
-		mov	si, offset str_cga
-@@display_video:
-		call	print_string				; Print video adapter present
-
-
+       		call	clear_screen
 		mov	ax, 1Eh				; Flush keyboard buffer in case user
 		mov	[es:1Ah], ax			;   was mashing keys during memory test
 		mov	[es:1Ch], ax
-       		call	clear_screen
-		mov	bx, BOOT_DELAY * 18		; Get ticks to pause at 18.2 Hz
-		call	delay_keypress
-
                 int	19h		; DISK BOOT
                                         ; causes reboot	of disk	system
 
@@ -440,16 +427,16 @@ fpu:		mov	ax, BDAseg
 
 endp		print_cpu_fpu
 ;-------------------------------------------------------------------------------------------------------
-proc		print_symbol near		; ...
-                mov	ah, 0Eh
+proc		print_backspace near		; ...
+                mov	ax, 0E08h
 		int	10h		; - VIDEO - WRITE CHARACTER AND	ADVANCE	CURSOR (TTY WRITE)
                                         ; AL = character, BH = display page (alpha modes)
                                         ; BL = foreground color	(graphics modes)
-                loop	print_symbol
+                loop	print_backspace
 
 sub_exit:				; ...
                 retn
-endp		print_symbol
+endp		print_backspace
 
 
 
@@ -657,6 +644,7 @@ proc		beep	near
 
 endp	beep
 
+
 ;--------------------------------------------------------------------------------------------------
 ; Waits for a keypress and then returns it (ah=scan code, al=ASCII)
 ;--------------------------------------------------------------------------------------------------
@@ -668,6 +656,24 @@ proc	get_key	near
 
 endp	get_key
 
+;--------------------------------------------------------------------------------------------------
+; Print video type
+;--------------------------------------------------------------------------------------------------
+
+proc    	video_type	near
+		mov	ah, 12h				; Test for EGA/VGA
+		mov	bx, 0FF10h
+		int	10h				; Video Get EGA Info
+		cmp	bh, 0FFh			; If EGA or later present BH != FFh
+		je	@@is_cga
+		mov	si, offset str_ega_vga		; Otherwise we have EGA/VGA
+		jmp	short @@display_video
+@@is_cga:
+		mov	si, offset str_cga
+@@display_video:
+		call	print_string				; Print video adapter present
+		ret
+endp		video_type
 ;---------------------------------------------------------------------------------------------------
 include int19h.asm 	; Warm Boot
 ;---------------------------------------------------------------------------------------------------
