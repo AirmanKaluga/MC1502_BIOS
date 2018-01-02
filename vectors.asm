@@ -13,7 +13,7 @@ int_vec_table_1:
                 dw offset int_10h         ; Offset int_10h
                 dw offset int_11h         ; Ofsset int_11h
                 dw offset int_12h         ; Offset int_12h
-                dw offset int_13h         ; Offset int_13h
+                dw offset int_13h	  ; Offset int_13h
                 dw offset int_14h         ; Offset int_14h
                 dw offset dummy_int       ; Offset int_15h
                 dw offset int_16h         ; Offset int_16h

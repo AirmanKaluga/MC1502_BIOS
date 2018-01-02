@@ -154,9 +154,75 @@ loc_FE815:				; ...
                 in	al, dx
                 test	al, 2
                 jz	short loc_FE81D
-                jmp	near ptr unk_FEF46
+                jmp	near  ptr loc_FEF46
 ; ---------------------------------------------------------------------------
 
 loc_FE81D:				; ...
                 loop	loc_FE815
                 jmp	short loc_FE7F0
+
+; ---------------------------------------------------------------------------
+loc_FEF46:
+                and	al, 78h		; ...
+                mov	cl, 3
+                shr	al, cl
+                mov	bx, offset unk_FEF97
+                xlat	[byte ptr cs:bx]
+                mov	ah, al
+                dec	dx
+                in	al, dx
+                inc	dx
+                mov	bl, al
+                mov	al, 37h
+                out	dx, al
+                mov	al, bl
+                jmp	loc_FE7F3
+
+
+
+
+proc		sub_FEF60 near		; ...
+                mov	cx, 14h
+
+loc_FEF63:				; ...
+                loop	loc_FEF63
+                retn
+endp		sub_FEF60
+loc_FEF66:				; ...
+                inc	dx
+                in	al, dx
+                mov	ch, al
+                mov	cl, 2
+                shr	ch, cl
+                and	ch, 20h
+                mov	bx, offset unk_FEF8F
+                mov	ah, al
+                and	al, 7
+                xlat	[byte ptr cs:bx]
+                xchg	ah, al
+                mov	cl, 3
+                shr	al, cl
+                and	al, 0Fh
+                mov	bx, offset unk_FEF97
+                xlat	[byte ptr cs:bx]
+                or	ah, al
+                inc	dx
+                mov	al, 0F0h
+                jmp	loc_FE7F3
+unk_FEF97:
+                db    0	;
+                db    4
+                db    2
+                db    6
+                db    8
+                db  0Ch
+                db  0Ah
+                db  0Eh
+                db  10h
+                db  14h
+                db  12h
+                db  16h
+                db  18h
+                db  1Ch
+                db  1Ah
+                db  1Eh

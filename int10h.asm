@@ -1202,3 +1202,12 @@ proc	video_init	near
 endp	video_init
 
 
+unk_FEF8F:
+                db    0	;
+                db  20h ;
+                db    1 ;
+                db  21h	;
+                db  40h	;
+                db  60h	;
+                db  41h	;
+                db  61h	;
