@@ -310,9 +310,9 @@ Mem_test:				; ...
                 mov	cx, 3
                 call	print_backspace
                 mov	al, dh
-                call	sub_FE26B
+                call	print_AL_nibble
                 mov	al, dl
-                call	sub_FE262
+                call	print_AL
                 add	bx, 20h
                 cmp	bx, [ds:main_ram_size_]
                 jb      short  Mem_test_loop
@@ -343,20 +343,20 @@ Test_error:				; ...
                 dec	di
                 dec	di
                 mov	ax, es
-                call	sub_FE25B
+                call	print_AX
                 mov	ax, 0E3Ah
                 int	10h		; - VIDEO - WRITE CHARACTER AND	ADVANCE	CURSOR (TTY WRITE)
                                         ; AL = character, BH = display page (alpha modes)
                                         ; BL = foreground color	(graphics modes)
                 mov	ax, di
-                call	sub_FE25B
+                call	print_AX
                 mov	ax, 0E20h
                 int	10h		; - VIDEO - WRITE CHARACTER AND	ADVANCE	CURSOR (TTY WRITE)
                                         ; AL = character, BH = display page (alpha modes)
                                         ; BL = foreground color	(graphics modes)
                 pop	ax
                 xor	ax, [es:di]
-                call	sub_FE25B
+                call	print_AX
                 mov	[ds:main_ram_size_], bx
                 xor	ax, ax
                 int	16h		; KEYBOARD - READ CHAR FROM BUFFER, WAIT IF EMPTY
@@ -374,7 +374,7 @@ proc		Mem_test_pattern near		; ...
                 call	mem_test_cycle
                 jnz	short sub_exit
                 xor	ax, ax
-endp		Mem_test_pattern ; sp-analysis	failed
+endp		Mem_test_pattern 
 
 
 
@@ -453,43 +453,37 @@ print_string_loop:
 endp            print_string
 
 ;-----------------------------------------------------------------------------------------------------------
+; Convert AX to ASCII and print it
 
-
-proc		sub_FE25B near		; ...
+proc		print_AX near		; ...
                 xchg	ah, al
-                call	sub_FE262
+                call	print_AL
                 xchg	ah, al
-endp		sub_FE25B ; sp-analysis	failed
+endp		print_AX 
 
-
-
-
-
-proc		sub_FE262 near		; ...
-                mov	cl, 4
+proc		print_AL near		
+                mov	cl, 4 ; To rotate the register by 4 bits
+                rol	al, cl ; <- rotate left for extract high nibble
+                call	print_AL_nibble
                 rol	al, cl
-                call	sub_FE26B
-                rol	al, cl
-endp		sub_FE262 ; sp-analysis	failed
+endp		print_AL 
 
-
-
-
-
-proc		sub_FE26B near		; ...
+; Converts a binary number in AL, range 0 to 0FH
+; to the appropriate ASCII character.
+proc		print_AL_nibble near		; ...
                 push	ax
                 and	al, 0Fh
-                add	al, 90h
-                daa
+                add	al, 90h ;special hex conversion sequence
+                daa         ;using ADDs and DAA's
                 adc	al, 40h
-                daa
+                daa         ;nibble now converted to ASCII
                 mov	ah, 0Eh
                 int	10h		; - VIDEO - WRITE CHARACTER AND	ADVANCE	CURSOR (TTY WRITE)
                                         ; AL = character, BH = display page (alpha modes)
                                         ; BL = foreground color	(graphics modes)
                 pop	ax
                 retn
-endp		sub_FE26B
+endp		print_AL_nibble
 
 ;--------------------------------------------------------------------------------------------------
 ; Print color title bar
