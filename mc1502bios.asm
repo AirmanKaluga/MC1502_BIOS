@@ -37,7 +37,7 @@ Banner:
 str_banner      db 'Elektronika MC1502 BIOS v7.3', 0
 
 Copiright:	
-		db LF, CR, 'Copiright (C) 1989-2017, NPO "Microprocessor" 1989', LF, CR, 0
+		db LF, CR, 'Copyright (C) 1989-2017, NPO "Microprocessor" 1989', LF, CR, 0
 empty_string:
 		db LF, CR, 0
 date_full:
