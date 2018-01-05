@@ -708,14 +708,14 @@ endp num_trans
  
 proc disable near	
 
-	    push    ax
-	    in	    al,	21h	    ; Interrupt	controller, 8259A.
-	    mov	    [bp+10h], ax
-	    mov	    al,	0BFh ;
-	    out	    21h, al	    ; Interrupt	controller, 8259A.
-	    call    bound_setup
-	    pop	    ax
-	    retn
+		push    ax
+		in	    al,	21h	    ; Interrupt	controller, 8259A.
+		mov	    [bp+10h], ax
+		mov	    al,	0BFh ;
+		out	    21h, al	    ; Interrupt	controller, 8259A.
+		call    bound_setup
+		pop	    ax
+		retn
 		
 endp disable
 
@@ -775,7 +775,6 @@ endp bound_setup
 ;=======================================
    
 proc seek near		    
- 
 		push    si
 		push    bx
 		push    cx
@@ -800,7 +799,6 @@ proc seek near
 		call    chk_stat_2
 		jb	    short j32_2
 		mov	    byte ptr [si], 0
-
  j28:				    
 		mov	    al,	[si]
 		sub	    al,	ch
@@ -816,12 +814,10 @@ proc seek near
 		push    cx
 		mov	    bl,	12h
 		call    get_parm
-
  j29:				    
 		mov	    cx,	550	    ; 1	ms loop
 		or	    ah,	ah	    ; test for time expired
 		jz	    short j31
-
  j30:				    
 		loop    j30		    ; delay for	1 ms
 		dec	    ah
@@ -832,21 +828,105 @@ proc seek near
 		popf
 		jb	    short j32_2
 		mov	    [si], ch
-
  j31_1:				    
 		pop	    bx
-
  j32:				    
 		pop	    bx
 		pop	    si
 		retn
 ;=======================================
-
  j32_2:				   
 		mov	    byte ptr [si], 0FFh
 		pop	    bx
 		jmp	    short j32
 		
 endp seek
+
+ ;=======================================
+proc chk_stat_2 near
+		push    bx
+		push    si
+		xor	    bx,	bx
+		mov	    si,	offset j33_3
+		push    si
+j33_2:
+		mov	    ah,	8
+		call    nec_output
+		call    results
+		jb	    short j35
+		mov	    al,	ds:seg40.nec_status
+		test    al,	20h
+		jnz	    short j35_1
+j33_3:
+		dec	    bx
+		jnz	    short j33_2
+		or	    byte ptr ds:seg40.diskette_status, 80h
+j34:				    
+		stc
+j35:				    
+		pop	    si
+		pop	    si
+		pop	    bx
+		retn
+ ;=======================================
+j35_1:				   
+		and	    al,	0C0h
+		jz	    short j35
+		or	    byte ptr ds:seg40.diskette_status, 40h
+		jmp	    short j34
+
+endp chk_stat_2
+
+ ;=======================================
  
+proc results near		
+    
+		cld
+		mov	    di,	42h
+		push    cx
+		push    dx
+		push    bx
+		mov	    bl,	7
+ j38:				   
+		xor	    cx,	cx
+		mov	    dx,	0F4h
+ j39:				
+		in	    al,	dx
+		test    al,	80h
+		jnz	    short j40a
+		loop    j39
+		or	    byte ptr ds:41h, 80h
+ j40:
+		stc
+ j44:				
+		pop	    bx
+		pop	    dx
+		pop	    cx
+		retn
+		
+ j40a:				
+		in	    al,	dx
+		test    al,	40h
+		jnz	    short j42
+ j41:				    
+		or	    byte ptr ds:41h, 20h
+		jmp	    short j40
+ j42:				    
+		inc	    dx
+		in	    al,	dx
+		mov	    [di], al
+		inc	    di
+		mov	    cx,	0Ah
+ j43:			
+		loop    j43
+		dec	    dx
+		in	    al,	dx
+		test    al,	10h
+		jz	    short j44
+		dec	    bl
+		jnz	    short j38
+		jmp	    short j41
+			
+endp results
+
  ;=======================================
