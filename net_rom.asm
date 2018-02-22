@@ -53,13 +53,13 @@ segment		code byte public 'CODE'
 		mov	[word ptr ds:04Eh],	cs
 
 loc_48:					; DATA XREF: seg000:0032r seg000:003Ew ...
-		and	[byte ptr ds:loc_40F+1], 7Fh
+		and	[byte ptr ds:0410h], 7Fh
 
 loc_4D:					; DATA XREF: seg000:0038r seg000:0044w
 		mov	ah, 12h
 
 loc_4F:
-		mov	[byte ptr ds:word_477],	ah
+		mov	[byte ptr ds:0477h],	ah
 
 loc_53:					; CODE XREF: seg000:0108j
 		mov	ax, 3
@@ -86,10 +86,10 @@ loc_67:					; DATA XREF: seg000:0012r seg000:0018w ...
 		mov	ah, 17h
 		int	1Ah
 		jb	short loc_BA
-		mov	[ds:byte_474], dl
-		mov	[ds:byte_475], dh
+		mov	[ds:0474h], dl
+		mov	[ds:0475h], dh
 		and	cl, 3Fh
-		mov	[ds:byte_476], cl
+		mov	[ds:0476h], cl
 		mov	ah, 4
 		int	1Ah		; CLOCK	- READ DATE FROM REAL TIME CLOCK (AT,XT286,CONV,PS)
 					; Return: DL = day in BCD
@@ -150,7 +150,7 @@ loc_BA:					; CODE XREF: seg000:006Dj seg000:0077j ...
 		lea	bx, [aRLinkNetworkBi+29h] ; "\r\n\r\n"
 		call	sub_10B
 		mov	ah, 36h	; '6'
-		mov	[byte ptr ds:word_477],	ah
+		mov	[byte ptr ds:0477h],	ah
 		jmpfar 	0, 7C00h
 ; ---------------------------------------------------------------------------
 
@@ -255,7 +255,7 @@ loc_168:                                ; CODE XREF: seg000:0161j
 		 jz      short loc_19A
 		 cmp     ah, 1
 		 jnz     short loc_179
-		 mov     al, [ds:byte_441]
+		 mov     al, [ds:0441h]
 		 clc
 		 jmp     loc_2F4
 ; ---------------------------------------------------------------------------
@@ -323,9 +323,9 @@ loc_1C7:				; CODE XREF: seg000:0246j
 
 loc_1CF:				; CODE XREF: seg000:02D1j seg000:02D9j
 		mov	bl, [bp+4]
-		cmp	bl, [ds:byte_474]
+		cmp	bl, [ds:0474h]
 		jbe	short loc_1DC
-		mov	bl, [ds:byte_474]
+		mov	bl, [ds:0474h]
 
 loc_1DC:				; CODE XREF: seg000:01D6j
 		cmp	[byte ptr bp+5], 33h ; '3'
@@ -410,7 +410,7 @@ loc_260:				; CODE XREF: seg000:0269j seg000:0284j
 		in	al, dx
 		cmp	al, 0A2h ; '¢'
 		jz	short loc_279
-		cmp	cx, [ds:word_46C]
+		cmp	cx, [ds:046Ch]
 		jns	short loc_260
 		and	al, 3
 		cmp	al, 1
@@ -439,7 +439,7 @@ loc_279:				; CODE XREF: seg000:0263j
 		call	sub_49B
 
 loc_28D:				; CODE XREF: seg000:loc_3D8j
-		mov	ah, [ds:byte_474]
+		mov	ah, [ds:0474h]
 		sub	[bp+4],	ah
 		jbe	short loc_2DC
 		mov	al, [bp+2]
@@ -447,14 +447,14 @@ loc_28D:				; CODE XREF: seg000:loc_3D8j
 		and	al, 3Fh
 		and	bl, 0C0h
 		add	al, ah
-		cmp	al, [ds:byte_476]
+		cmp	al, [ds:0476h]
 		jbe	short loc_2D4
-		sub	al, [ds:byte_476]
+		sub	al, [ds:0476h]
 		or	al, bl
 		mov	[bp+2],	al
 		inc	byte ptr [bp+1]
 		mov	ah, [bp+1]
-		cmp	ah, [ds:byte_475]
+		cmp	ah, [ds:0475h]
 		jbe	short loc_2CA
 		mov	[byte ptr bp+1], 0
 		inc	byte ptr[bp+3]
@@ -539,7 +539,7 @@ loc_336:				; CODE XREF: seg000:033Fj seg000:035Dj
 		in	al, dx
 		cmp	al, 0A2h ; '¢'
 		jz	short loc_350
-		cmp	cx, [ds:word_46C]
+		cmp	cx, [ds:046Ch]
 		jns	short loc_336
 		and	al, 3
 		cmp	al, 1
@@ -573,9 +573,9 @@ loc_350:				; CODE XREF: seg000:0339j
 		add	bh, ah
 		call	sub_4C9
 		mov	ah, [bp+4]
-		cmp	ah, [ds:byte_474]
+		cmp	ah, [ds:0474h]
 		jbe	short loc_37E
-		mov	ah, [ds:byte_474]
+		mov	ah, [ds:0474h]
 
 loc_37E:				; CODE XREF: seg000:0378j
 		add	bh, ah
@@ -678,7 +678,7 @@ loc_41A:				; DATA XREF: seg000:03DEo
 
 loc_420:				; CODE XREF: seg000:01E7p seg000:0213p ...
 		mov	dx, 332h
-		mov	cx, [ds:word_46C]
+		mov	cx, [ds:046Ch]
 		add	cx, 2
 
 loc_42A:				; CODE XREF: seg000:0447j
@@ -702,9 +702,11 @@ byte_441	db 0F9h			; DATA XREF: seg000:0172r
 ; ---------------------------------------------------------------------------
 
 loc_443:				; CODE XREF: seg000:0433j seg000:043Aj
-		cmp	cx, [ds:word_46C]
+		cmp	cx, [ds:046Ch]
 		jns	short loc_42A
-		add	cx, [ds:word_477]
+		add	cx, [ds:0477h]
+		
+loc_44D:
 		in	al, dx
 		mov	ah, al
 		and	al, 3
@@ -718,31 +720,32 @@ loc_443:				; CODE XREF: seg000:0433j seg000:043Aj
 		jz	short loc_462
 		out	dx, al
 
-loc_462:				; CODE XREF: seg000:045Aj seg000:045Fj
+loc_462:
 		test	ah, 20h
 		jz	short loc_468
 		in	al, dx
 
-loc_468:				; CODE XREF: seg000:0465j
+loc_468:	
 		inc	dx
 		inc	dx
-; ---------------------------------------------------------------------------
-		db 0A1h, 6Ch
-word_46C	dw 3B04h		; DATA XREF: seg000:0265r seg000:033Br ...
-		db 6
-		db 6Ch,	4, 74h,	0FAh, 3Bh
-byte_474	db 0Eh			; DATA XREF: seg000:0079w seg000:01D2r ...
-byte_475	db 6Ch			; DATA XREF: seg000:007Dw seg000:02B7r
-byte_476	db 4			; DATA XREF: seg000:0084w seg000:02A2r ...
-word_477	dw 0D479h		; DATA XREF: seg000:loc_4Fw
-					; seg000:00E7w	...
-; ---------------------------------------------------------------------------
-		jmp	short loc_494
-; ---------------------------------------------------------------------------
-		;align 2
+loc_46A:                                
+		 mov     ax, [word ptr ds:loc_46A+2]
+
+loc_46D:                            
+		 cmp     ax, [word ptr ds:loc_46A+2]
+		 jz      short loc_46D
+
+loc_473:                                
+		 cmp     cx, [word ptr ds:loc_46A+2]
+
+loc_477:                                
+		 jns     short loc_44D
+		 jmp     short loc_494
+		 
+ ; ---------------------------------------------------------------------------
 
 loc_47C:				; CODE XREF: seg000:042Fj
-		add	cx, [ds:word_477]
+		add	cx, [ds:0477h]
 
 loc_480:				; CODE XREF: seg000:0454j
 		dec	dx
@@ -757,7 +760,7 @@ loc_487:				; CODE XREF: seg000:0492j
 		and	al, 3
 		cmp	al, 2
 		jz	short locret_49A
-		cmp	cx, [ds:word_46C]
+		cmp	cx, [ds:046Ch]
 		jns	short loc_487
 
 loc_494:				; CODE XREF: seg000:0479j
@@ -785,12 +788,21 @@ proc		sub_49B	near		; CODE XREF: seg000:021Bp seg000:028Ap ...
 		mov	ah, 10h
 		jmp	short loc_4C4
 ; ---------------------------------------------------------------------------
-		;align 2
-		db 2 dup(0FFh),	81h, 85h, 89h, 91h, 88h, 8Ah, 2Dh, 8Ah
+;04B2 
+		db 0FFh
+		db 0FFh
+		db  81h ; Á
+		db  85h ; Å
+		db  89h ; É
+		db  91h ; Ñ
+		db  88h ; È
+		db  8Ah ; Ê
+		db  2Dh ; -
+		db  8Ah ; Ê
 ; ---------------------------------------------------------------------------
 
 loc_4BC:				; CODE XREF: sub_49B+9j sub_49B+10j
-		cmp	cx, [ds:word_46C]
+		cmp	cx, [ds:046Ch]
 		jns	short sub_49B
 		mov	ah, 80h	; '€'
 
@@ -810,7 +822,7 @@ proc		sub_4C9	near		; CODE XREF: seg000:01EDp seg000:01F2p ...
 		in	al, dx
 		cmp	al, 0A2h ; '¢'
 		jz	short loc_4E5
-		cmp	cx, [ds:word_46C]
+		cmp	cx, [ds:046Ch]
 		jns	short sub_4C9
 		and	al, 3
 		cmp	al, 1
@@ -847,7 +859,7 @@ proc		sub_4EE	near		; CODE XREF: seg000:0216p seg000:030Bp ...
 		in	al, dx
 		cmp	al, 0A2h ; '¢'
 		jz	short loc_50A
-		cmp	cx, [ds:word_46C]
+		cmp	cx, [ds:046Ch]
 		jns	short sub_4EE
 		and	al, 3
 		cmp	al, 1
