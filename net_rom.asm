@@ -37,8 +37,8 @@ segment		code byte public 'CODE'
 		mov	ss, ax
 		mov	sp, 7C00h
 		sti
-		mov	ax, [word ptr ds:068h]
-		mov	[ds:0168h], ax
+		mov	ax, [word ptr ds:068h] ; get int 01Ah addr (Time of Day)
+		mov	[ds:0168h], ax   ; 	= set int 05Ah address
 		mov	[word ptr ds:068h],	offset loc_511
 		mov	ax, [word ptr ds:06Ah]
 		mov	[word ptr ds:016Ah], ax
@@ -63,8 +63,7 @@ loc_4F:
 
 loc_53:
 		mov	ax, 3
-		int	10h		; - VIDEO - SET	VIDEO MODE
-					; AL = mode
+		int	10h		; - VIDEO - SET	VIDEO MODE 3
 
 loc_58:
 		lea	bx, [aRLinkNetworkBi] ;	"R-LINK	Network	BIOS V1.00\r\n(C) SPIKA	"...
