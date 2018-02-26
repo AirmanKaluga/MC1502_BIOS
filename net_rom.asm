@@ -127,7 +127,7 @@ loc_67:
 					; CL = minutes in BCD
 					; DH = seconds in BCD
 
-loc_BA:					; CODE XREF: seg000:006Dj seg000:0077j ...
+loc_BA:					
 		jb	short loc_F0
 		mov	al, ch
 		call	sub_11A
@@ -165,7 +165,7 @@ loc_F6:
 		call	sub_10B
 
 loc_FD:					
-		lea	bx, [byte_59A]
+		lea	bx, [aRLinkBootErr]
 
 loc_101:				
 		call	sub_10B
@@ -722,7 +722,7 @@ loc_468:
 		inc	dx
 		inc	dx
                                 
-		mov     ax, [word ptr ds:046Ch]
+		mov     ax, [word ptr ds:046Ch] ; get timer tick
 
 loc_46D:                            
 		 cmp     ax, [word ptr ds:046Ch]
@@ -936,12 +936,11 @@ loc_566:
 		in	al, dx
 		jmp	short loc_561
 ; ---------------------------------------------------------------------------
-aRLinkNetworkBi	db 'R-LINK Network BIOS V1.00',0Dh,0Ah ; DATA XREF: seg000:loc_58o
+aRLinkNetworkBi	db 'R-LINK Network BIOS V1.00',0Dh,0Ah
 		db '(C) SPIKA 1990'
 newline	db 0Dh,0Ah
 		db 0Dh,0Ah,0
-byte_59A	db 52h			; DATA XREF: seg000:loc_FDo
-aLinkBootError	db '-LINK boot error',0Dh,0Ah,0
+aRLinkBootErr	db 'R-LINK boot error',0Dh,0Ah,0
 		db 0FFh
 		db 0FFh
 		db 0FFh
