@@ -34,38 +34,42 @@ segment		code byte public 'CODE'
 
 
 Banner:
-str_banner      db 'Elektronika MC1502 BIOS v7.3', 0
+str_banner      db ' 8088/8086/V20/V30 Modular BIOS v7.3', 0
 
+date_full:
+		db LF, CR, ' Released 18/03/2020 by Airman and RUS' , 0
+
+enter_setup:	
+		db ' Press <DEL> to Enter Setup', 0
 Copiright:	
-		db LF, CR, 'Copyright (C) 1989-2017, NPO "Microprocessor" 1989', LF, CR, 0
+		db LF, CR, ' Copyright (C) 1989-2020, NPO "Microprocessor" 1989', LF, CR, 0
 empty_string:
 		db LF, CR, 0
-date_full:
-		db '12/31/2017',0
+platform_string:
+		db LF, CR, ' ELECTRONIKA MC1502', 0
 
-str_cpu:
-		db LF, CR, LF, CR, 'Main processor: ', 0
 str_8088:
-	 	db 'Intel 8088 5.33Mhz', 0
+	 	db LF, CR, LF, CR,' Intel (C) 8088 at 5.33 Mhz', 0
 str_v20:                                                  	
-		db 'NEC V20 5.33Mhz', 0
+		db LF, CR, LF, CR,' NEC (C) V20 at 5.33 Mhz', 0
 str_8087:
 		db ' with Intel (C) 8087 FPU', 0
-
 TestingSystem:
-		db  LF, CR, 'Memory testing: 000K OK', 0
+		db ' Memory testing: 000K OK', 0
+SkipMemTest:
+		db ' Press <ESC> to skip memory test', 0
 FailedAt:
-		db  LF, CR, 'Failed at ', 0
+		db  LF, CR, ' Failed at ', 0
 SystemNotFound:
-		db  LF, CR, 'System not found.', LF, CR, 0
+		db  LF, CR, ' System not found.', LF, CR, 0
 
 str_ega_vga:
-		db LF, CR, LF, CR, 'EGA/VGA Video card Installed', LF, CR, 0
+		db LF, CR, LF, CR, ' EGA/VGA Video card Installed          ', LF, CR, 0
 str_cga:
-		db LF, CR, LF, CR, 'CGA Video card installed', LF, CR, 0
+		db LF, CR, LF, CR, ' CGA Video card installed              ', LF, CR, 0
 
-str_ins_disk:	db 'Insert BOOT disk in A:', CR, LF
-		db 'Press any key when ready', CR, LF, LF, 0
+str_ins_disk:	db ' Insert BOOT disk in A:', CR, LF
+		db ' Press any key when ready', CR, LF, LF, 0
 
 port_int_fdc:
                 db  48h	 		; ...
@@ -281,17 +285,27 @@ Print_Startup_Info:				; ...
 
 		call 	beep
 		call	video_init
-		call	print_title
+		call	print_date
+		mov	si, offset Banner
+		call	print_string
                 mov 	si, offset Copiright
 		call	print_string
 		mov 	si, offset empty_string
 		call	print_string
-		mov 	si, offset date_full
+		mov 	si, offset platform_string
 		call	print_string
-
 		call	print_cpu_fpu
-		call	video_type		
-		mov	si, offset TestingSystem
+	 	mov	dl, 00h
+		mov	dh, 09h		
+		mov	ah, 02h
+		int 	10h		
+		mov	si, SkipMemTest
+		call 	print_string
+        	mov	dl, 0h
+		mov	dh, 07h		
+		mov	ah, 02h
+		int 	10h		
+                mov	si, offset TestingSystem
                 call	print_string
                 mov	cx, 4h
                 call	print_backspace
@@ -307,8 +321,10 @@ Print_Startup_Info:				; ...
 
 ; ---------------------------------------------------------------------------
 Mem_test_loop:
+
                 call	Mem_test_pattern
                 jnz	short Test_error
+
  
 Mem_test:				; ...
                 mov	ax, es
@@ -327,13 +343,29 @@ Mem_test:				; ...
                 mov	al, dl
                 call	print_AL
                 add	bx, 20h
+		mov	Ah, 01h
+		int	16h			; çÄÜÄíÄ ãûÅÄü äãÄÇàòÄ ?
+		jz	Mem_size_compare		; çÖí
+		xor	ax, ax
+		int	16h
+		cmp	al, 1Bh			; ESC ?
+		je	ClearMemEscString
+Mem_size_compare:
                 cmp	bx, [ds:main_ram_size_]
                 jb      short  Mem_test_loop
 
+ClearMemEscString:
+	 	mov	dl, 0h
+		mov	dh, 7h		
+		mov	ah, 02h
+		int 	10h		
+	
+Print_video_type:
+		call	video_type
 Boot:
                 mov	si, empty_string
                 call	print_string
-		mov	cx, 04h
+		mov	cx, 0Fh
 super_delay:
 		push 	cx
 		mov 	cx, 0FFFFh
@@ -387,6 +419,7 @@ proc		Mem_test_pattern near		; ...
                 call	mem_test_cycle
                 jnz	short sub_exit
                 xor	ax, ax
+		mov	AH,1
 endp		Mem_test_pattern 
 
 
@@ -394,23 +427,33 @@ endp		Mem_test_pattern
 
 
 proc		mem_test_cycle near		; ...
-                mov	cx, mem_test_cycle_count
+                mov     cx, [mem_test_cycle_count]
                 xor	di, di
                 rep stosw
-                mov	cx, mem_test_cycle_count
+                mov     cx, [mem_test_cycle_count]
                 xor	di, di
                 repe scasw
                 retn
 endp		mem_test_cycle
 
 
+proc		print_backspace near		; ...
+                mov	ax, 0E08h
+		int	10h		; - VIDEO - WRITE CHARACTER AND	ADVANCE	CURSOR (TTY WRITE)
+                                        ; AL = character, BH = display page (alpha modes)
+                                        ; BL = foreground color	(graphics modes)
+                loop	print_backspace
+
+sub_exit:				; ...
+                retn
+endp		print_backspace
+
+mem_test_cycle_count:	dw 4000h
 ;---------------------------------------------------------------------------------------------------
 ;  Print cpu and fpu type
 ;---------------------------------------------------------------------------------------------------
 proc		print_cpu_fpu near
-        	mov 	si, offset str_cpu
-		call	print_string
-		xor     al, al
+        	xor     al, al
 		mov	al, 40h				; mul on V20 does not affect the zero flag
 		mul	al				;   but on an 8088 the zero flag is used
 		jz	@@have_v20			; Was zero flag set?
@@ -440,16 +483,6 @@ fpu:		mov	ax, BDAseg
 
 endp		print_cpu_fpu
 ;-------------------------------------------------------------------------------------------------------
-proc		print_backspace near		; ...
-                mov	ax, 0E08h
-		int	10h		; - VIDEO - WRITE CHARACTER AND	ADVANCE	CURSOR (TTY WRITE)
-                                        ; AL = character, BH = display page (alpha modes)
-                                        ; BL = foreground color	(graphics modes)
-                loop	print_backspace
-
-sub_exit:				; ...
-                retn
-endp		print_backspace
 
 
 
@@ -499,33 +532,36 @@ proc		print_AL_nibble near		; ...
 endp		print_AL_nibble
 
 ;--------------------------------------------------------------------------------------------------
-; Print color title bar
+; Print date
 ;--------------------------------------------------------------------------------------------------
-proc		print_title	near
+proc		print_date	near
 
-                mov	si, Banner
-		xor	dx, dx				; Cursor starts in upper left corner
-		mov	cx, 1				; Character repeat count
-
-                mov 	bl, 01Fh
-@@loop_title:
-		lods   [byte ptr cs:si] 		; Print zero terminated string
-		or	al, al
-		jz	@@done_title			; Terminator in ax?
-		inc	dl				; New cursor position
-		call	color_out_char			; Print character in ax and advance cursor
-		jmp	@@loop_title				;   back for more
-
-@@done_title:
-		mov	cl, 34h				; Repeat trailing space 9 chars
-color_out_char:
-		mov	ah, 09h 			; Write character and attribute
-		int	10h
-		mov	ah, 02h				; Set cursor position
-		int	10h
+	 	mov	dl, 0h
+		mov	dh, 18h		
+		mov	ah, 02h
+		int 	10h		
+		mov	si, enter_setup
+		call 	print_string
+		mov	si, date_full
+		call	print_string	
+		xor 	dx, dx
+		mov 	ah, 02h
+		int 	10h
 		ret
 
-endp	print_title
+endp		print_date
+;--------------------------------------------------------------------------------------------------
+; Flush string
+;--------------------------------------------------------------------------------------------------
+proc		flush_string	near
+                mov 	cx, 50h
+		mov	al, 20h
+		mov	ah, 0ah
+		int 	10
+		ret
+
+endp		flush_string
+
 
 ;---------------------------------------------------------------------------------------------------
 ; Clear display screen
@@ -546,34 +582,6 @@ proc		clear_screen	near
 		ret
 
 endp		clear_screen
-
-;--------------------------------------------------------------------------------------------------
-; Delay number of clock ticks in bx, unless a key is pressed first (return ASCII code in al)
-;--------------------------------------------------------------------------------------------------
-proc	delay_keypress	near
-
-	sti					; Enable interrupts so timer can run
-	add	bx, [es:46Ch]			; Add pause ticks to current timer ticks
-						;   (0000:046C = 0040:006C)
-@@delay:
-	mov	ah, 01h
-	int	16h				; Check for keypress
-	jnz	@@keypress			; End pause if key pressed
-
-	mov	cx, [es:46Ch]			; Get current ticks
-	sub	cx, bx				; See if pause is up yet
-	jc	@@delay				; Nope
-
-@@done:
-	cli					; Disable interrupts
-	ret
-
-@@keypress:
-	xor	ah, ah
-	int	16h				; Flush keystroke from buffer
-	jmp	short @@done
-
-endp	delay_keypress
 
 ;---------------------------------------------------------------------------------------------------
 ; Saerch additional rom
@@ -796,7 +804,7 @@ endp 		power
 ;--------------------------------------------------------------------------------------------------
 ; BIOS Release Date and Signature
 ;--------------------------------------------------------------------------------------------------
-date	db '12/31/17',0
+date	db '18/03/20', 0
 		db 0FEh  ; Computer type (XT)
 
 ends		code

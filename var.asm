@@ -51,4 +51,3 @@ warm_boot_flag_ equ 	072h
 prn_timeout_1_ 	equ 	078h
 rs232_timeout1_ equ 	07Ch
 
-mem_test_cycle_count	equ	4000h
