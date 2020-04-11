@@ -1,4 +1,3 @@
-BOOT_DELAY	= 5		; Seconds to wait after memory test (keypress will bypass)
 
 	Ideal
 	model small ; produce .EXE file then truncate it
@@ -37,7 +36,7 @@ Banner:
 str_banner      db ' 8088/8086/V20/V30 Modular BIOS v7.3', 0
 
 date_full:
-		db LF, CR, ' Released 18/03/2020 by Airman and RUS' , 0
+		db LF, CR, ' Released 11/04/2020 by Airman and RUS' , 0
 
 enter_setup:	
 		db ' Press <DEL> to Enter Setup', 0
@@ -54,8 +53,10 @@ str_v20:
 		db LF, CR, LF, CR,' NEC (C) V20 at 5.33 Mhz', 0
 str_8087:
 		db ' with Intel (C) 8087 FPU', 0
-TestingSystem:
+StrTestingSystem:
 		db ' Memory testing: 000K OK', 0
+StrEnteringSetup:
+		db CR, LF, CR, LF, CR, LF, ' Entering Setup...', CR, LF, LF, 0
 SkipMemTest:
 		db ' Press <ESC> to skip memory test', 0
 FailedAt:
@@ -120,6 +121,11 @@ proc		post	near
 warm_boot:				; Entered by POWER_ON/RESET
                 cli
                 cld
+write_first_post_codes:
+		mov	al, 01h
+		out	mfg_port, al
+
+
 @@init_PPI:
                 mov	al, 88h
                 out	63h, al		; PC/XT	PPI Command/Mode Register.
@@ -143,6 +149,12 @@ warm_boot:				; Entered by POWER_ON/RESET
                                         ; 5: 0=enable I/O channel check
                                         ; 6: 0=hold keyboard clock low
                                         ; 7: 0=enable kbrd
+write_ppi_post_code:
+		
+		mov	al, 02h
+		out	mfg_port, al
+
+
 @@init_PIC:		
                 mov	al, 13h
                 out	20h, al		; Interrupt controller,	8259A.
@@ -150,6 +162,11 @@ warm_boot:				; Entered by POWER_ON/RESET
                 out	21h, al		; Interrupt controller,	8259A.
                 mov	al, 9
                 out	21h, al		; Interrupt controller,	8259A.
+
+write_pic_post_code:
+		mov	al, 03h
+		out	mfg_port, al
+
 @@init_PIT:
                 mov	al, 36h
                 out	43h, al		; Timer	8253-5 (AT: 8254.2).
@@ -180,6 +197,10 @@ warm_boot:				; Entered by POWER_ON/RESET
                 pop	ds
                 assume ds:nothing
 
+wriet_pit_post_code:
+		mov	al, 04h
+		out	mfg_port, al
+
 @@init_vec_table_1:
                 mov	cx, 17h
                 mov	si, offset int_vec_table_1
@@ -191,6 +212,10 @@ vec_table_1_loop:				; ...
                 mov	ax, cs
                 stosw
                 loop	vec_table_1_loop
+
+write_fist_vec_table_code:
+		mov	al, 05h
+		out	mfg_port, al
 
 @@init_vect_table_2:
                 mov	cx, 8
@@ -204,6 +229,9 @@ vec_table_2_loop:				; ...
                 stosw
                 loop	vec_table_2_loop
 
+write_secont_vec_table_code:
+		mov	al, 06h
+		out	mfg_port, al
 
 @@init_dummy_int:
                 mov	di, 8
@@ -211,6 +239,11 @@ vec_table_2_loop:				; ...
                 stosw
                 mov	ax, cs
                 stosw
+
+write_dummy_int_code:
+		mov	al, 07h
+		out	mfg_port, al
+
 
 @@init_print_screen_int:
                 mov	di, 14h
@@ -222,11 +255,17 @@ vec_table_2_loop:				; ...
                 mov	es, ax
                 assume es:nothing
 
+write_print_screen_int_code:
+		mov	al, 08h
+		out	mfg_port, al
+
+
 @@init_BDA:
                 mov	cx, 10h
                 mov	si, offset BDA
                 xor	di, di
                 rep movsw
+
 @@Test_type_fdc:
                 in	al, 4Bh
                 not	al
@@ -305,7 +344,7 @@ Print_Startup_Info:				; ...
 		mov	dh, 07h		
 		mov	ah, 02h
 		int 	10h		
-                mov	si, offset TestingSystem
+                mov	si, offset StrTestingSystem
                 call	print_string
                 mov	cx, 4h
                 call	print_backspace
@@ -317,11 +356,12 @@ Print_Startup_Info:				; ...
                 mov	dx, ax
                 mov	es, ax
                 assume es:nothing
+				
+				mov [ds:mem_test_cycle_addr], mem_test_cycle_full
                 jmp	short Mem_test
 
 ; ---------------------------------------------------------------------------
 Mem_test_loop:
-
                 call	Mem_test_pattern
                 jnz	short Test_error
 
@@ -349,7 +389,17 @@ Mem_test:				; ...
 		xor	ax, ax
 		int	16h
 		cmp	al, 1Bh			; ESC ?
-		je	ClearMemEscString
+		jne	Check_Del_Key; ClearMemEscString
+		mov word ptr [ds:mem_test_cycle_addr], mem_test_cycle_short
+
+Check_Del_Key:
+		cmp ax, 5300h  ; 00 - скан код; 53h - DEL
+		jne Mem_size_compare
+		mov	si, offset StrEnteringSetup
+		call	print_string
+		cli
+		hlt
+
 Mem_size_compare:
                 cmp	bx, [ds:main_ram_size_]
                 jb      short  Mem_test_loop
@@ -359,7 +409,8 @@ ClearMemEscString:
 		mov	dh, 7h		
 		mov	ah, 02h
 		int 	10h		
-	
+
+
 Print_video_type:
 		call	video_type
 Boot:
@@ -408,6 +459,7 @@ Test_error:				; ...
                                         ; Return: AH = scan code, AL = character
 endp		post
 
+
 proc		Mem_test_pattern near		; ...
                 mov	ax, 0FFFFh
                 call	mem_test_cycle
@@ -427,10 +479,10 @@ endp		Mem_test_pattern
 
 
 proc		mem_test_cycle near		; ...
-                mov     cx, [mem_test_cycle_count]
+                mov     cx, [ds:mem_test_cycle_addr]
                 xor	di, di
                 rep stosw
-                mov     cx, [mem_test_cycle_count]
+                mov     cx, [ds:mem_test_cycle_addr]
                 xor	di, di
                 repe scasw
                 retn
@@ -448,7 +500,7 @@ sub_exit:				; ...
                 retn
 endp		print_backspace
 
-mem_test_cycle_count:	dw 4000h
+
 ;---------------------------------------------------------------------------------------------------
 ;  Print cpu and fpu type
 ;---------------------------------------------------------------------------------------------------
@@ -680,12 +732,12 @@ proc    	video_type	near
 		mov	bx, 0FF10h
 		int	10h				; Video Get EGA Info
 		cmp	bh, 0FFh			; If EGA or later present BH != FFh
-		je	@@is_cga
+		je	is_cga
 		mov	si, offset str_ega_vga		; Otherwise we have EGA/VGA
-		jmp	short @@display_video
-@@is_cga:
+		jmp	short display_video
+is_cga:
 		mov	si, offset str_cga
-@@display_video:
+display_video:
 		call	print_string				; Print video adapter present
 		ret
 endp		video_type
@@ -804,7 +856,7 @@ endp 		power
 ;--------------------------------------------------------------------------------------------------
 ; BIOS Release Date and Signature
 ;--------------------------------------------------------------------------------------------------
-date	db '18/03/20', 0
+date	db '11/04/20', 0
 		db 0FEh  ; Computer type (XT)
 
 ends		code
