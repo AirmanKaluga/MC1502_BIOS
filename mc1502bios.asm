@@ -36,11 +36,11 @@ Banner:
 str_banner      db ' 8088/8086/V20/V30 Modular BIOS v7.3', 0
 
 date_full:
-		db LF, CR, ' Released 11/04/2020 by Airman and RUS' , 0
+		db LF, CR, ' Released 12/04/2020 by Airman and RUS' , 0
 
 enter_setup:	
 		db ' Press <DEL> to Enter Setup', 0
-Copiright:	
+Copyright:	
 		db LF, CR, ' Copyright (C) 1989-2020, NPO "Microprocessor" 1989', LF, CR, 0
 empty_string:
 		db LF, CR, 0
@@ -327,7 +327,7 @@ Print_Startup_Info:				; ...
 		call	print_date
 		mov	si, offset Banner
 		call	print_string
-                mov 	si, offset Copiright
+                mov 	si, offset Copyright
 		call	print_string
 		mov 	si, offset empty_string
 		call	print_string
@@ -398,11 +398,12 @@ Check_Del_Key:
 		mov	si, offset StrEnteringSetup
 		call	print_string
 		cli
-		hlt
+		hlt			; TODO - make bios Setup 
+	;   jmp SetupBIOS
 
 Mem_size_compare:
-                cmp	bx, [ds:main_ram_size_]
-                jb      short  Mem_test_loop
+		cmp	bx, [ds:main_ram_size_]
+		jb      short  Mem_test_loop
 
 ClearMemEscString:
 	 	mov	dl, 0h
@@ -856,7 +857,7 @@ endp 		power
 ;--------------------------------------------------------------------------------------------------
 ; BIOS Release Date and Signature
 ;--------------------------------------------------------------------------------------------------
-date	db '11/04/20', 0
+date	db '12/04/20', 0
 		db 0FEh  ; Computer type (XT)
 
 ends		code
