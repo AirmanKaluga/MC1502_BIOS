@@ -14,6 +14,8 @@ keybd_alt_num_ 		equ 	019h
 keybd_q_head_ 		equ 	01Ah
 keybd_q_tail_ 		equ 	01Ch
 keybd_break_ 		equ 	071h
+keybd_buffer_ 		equ 	01Eh
+keybd_buffer_end	equ 	03Eh
 
 dsk_recal_stat 		equ 	03Eh
 dsk_motor_stat 		equ 	03Fh

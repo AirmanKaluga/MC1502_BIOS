@@ -1,18 +1,30 @@
 ;---------------------------------------------------------------------------------------------------
-; Interrupt 17h - Parallel LPT Services
+; Прерывание 17h - Сервис параллельного порта (LPT/принтер)
+; Функции:
+;   AH = 00h - Печать символа на принтере
+;   AH = 01h - Инициализация принтера
+;   AH = 02h - Получение статуса принтера
+;
+; МС1502 использует нестандартные порты ввода-вывода для принтера:
+;   Порт данных:    60h (вместо стандартных 378h/278h)
+;   Порт статуса:   6Ah (вместо стандартных 379h/279h)  
+;   Порт управления: биты 2-4 порта 61h (вместо 37Ah/27Ah)
 ;---------------------------------------------------------------------------------------------------
 proc		int_17h	near
-                push	dx
+                push	dx              ; Сохраняем регистры
                 push	cx
                 push	bx
-                or	ah, ah
-                jz	short loc_FEFE5
-                dec	ah
-                jz	short loc_FF028
-                dec	ah
-                jz	short loc_FF00D
-
-loc_FEFE1:				; ...
+                
+                ; Проверяем запрошенную функцию по значению в AH
+                or	ah, ah          ; AH = 00h?
+                jz	short print_char_func    ; Да - печать символа
+                dec	ah              ; AH = 01h?
+                jz	short init_printer_func  ; Да - инициализация принтера
+                dec	ah              ; AH = 02h?
+                jz	short get_status_func    ; Да - получение статуса принтера
+                
+                ; Неизвестная функция - возвращаем управление
+exit_interrupt:				; ...
                 pop	bx
                 pop	cx
                 pop	dx
@@ -20,131 +32,124 @@ loc_FEFE1:				; ...
 endp		int_17h
 ; ---------------------------------------------------------------------------
 
-loc_FEFE5:				; ...
-                push	ax
-                mov	bl, 0Ah
-                xor	cx, cx
-                out	60h, al		; 8042 keyboard	controller data	register.
-
-loc_FEFEC:				; ...
-                in	al, 6Ah
-                mov	ah, al
-                test	al, 80h
-                jz	short loc_FF002
-                loop	loc_FEFEC
-                dec	bl
-                jnz	short loc_FEFEC
-                or	ah, 1
-                and	ah, 0F1h
-                jmp	short loc_FF015
 ; ---------------------------------------------------------------------------
-
-loc_FF002:				; ...
-                in	al, 61h		; PC/XT	PPI port B bits:
-                                        ; 0: Tmr 2 gate	??? OR	03H=spkr ON
-                                        ; 1: Tmr 2 data	??  AND	0fcH=spkr OFF
-                                        ; 3: 1=read high switches
-                                        ; 4: 0=enable RAM parity checking
-                                        ; 5: 0=enable I/O channel check
-                                        ; 6: 0=hold keyboard clock low
-                                        ; 7: 0=enable kbrd
-                or	al, 4
-                out	61h, al		; PC/XT	PPI port B bits:
-                                        ; 0: Tmr 2 gate	??? OR	03H=spkr ON
-                                        ; 1: Tmr 2 data	??  AND	0fcH=spkr OFF
-                                        ; 3: 1=read high switches
-                                        ; 4: 0=enable RAM parity checking
-                                        ; 5: 0=enable I/O channel check
-                                        ; 6: 0=hold keyboard clock low
-                                        ; 7: 0=enable kbrd
-                and	al, 0FBh
-                out	61h, al		; PC/XT	PPI port B bits:
-                                        ; 0: Tmr 2 gate	??? OR	03H=spkr ON
-                                        ; 1: Tmr 2 data	??  AND	0fcH=spkr OFF
-                                        ; 3: 1=read high switches
-                                        ; 4: 0=enable RAM parity checking
-                                        ; 5: 0=enable I/O channel check
-                                        ; 6: 0=hold keyboard clock low
-                                        ; 7: 0=enable kbrd
-                pop	ax
-
-loc_FF00D:				; ...
-                push	ax
-
-loc_FF00E:				; ...
-                in	al, 6Ah
-                mov	ah, al
-                and	ah, 0D0h
-
-loc_FF015:				; ...
-                pop	dx
-                mov	al, dl
-                test	ah, 10h
-                jnz	short loc_FF020
-                or	ah, 8
-
-loc_FF020:				; ...
-                and	ah, 0E9h
-                xor	ah, 0D0h
-                jmp	short loc_FEFE1
+; Функция 00h: Печать символа на принтере
+; Вход: AL = символ для печати, DX = номер порта принтера (0 для LPT1)
+; Выход: AH = статус принтера
 ; ---------------------------------------------------------------------------
+print_char_func:				; ...
+                push	ax              ; Сохраняем символ для печати
+                mov	bl, 0Ah         ; Количество попыток отправки (10 раз)
+                xor	cx, cx          ; CX = 0 для внутреннего счетчика ожидания
+                
+                ; Отправляем символ в порт данных принтера (60h для МС1502)
+                out	60h, al         ; Порт данных принтера МС1502
+                
+; ---------------------------------------------------------------------------
+; Цикл ожидания готовности принтера (бит BUSY = 0)
+; ---------------------------------------------------------------------------
+wait_printer_ready:				; ...
+                in	al, 6Ah         ; Читаем порт статуса принтера МС1502
+                mov	ah, al          ; Сохраняем статус в AH
+                test	al, 80h         ; Проверяем бит BUSY (1 = принтер занят, 0 = готов)
+                jz	short printer_is_ready    ; Принтер готов - продолжаем
+                
+                ; Принтер занят - продолжаем ожидание
+                loop	wait_printer_ready    ; Внутренний цикл (65536 раз)
+                dec	bl              ; Уменьшаем счетчик попыток
+                jnz	short wait_printer_ready    ; Продолжаем ожидание
+                
+                ; Таймаут - принтер не ответил в течение 10 попыток
+                or	ah, 1           ; Устанавливаем бит таймаута (бит 0)
+                and	ah, 0F1h        ; Маскируем ненужные биты
+                jmp	short prepare_status_return    ; Возвращаем статус с ошибкой
 
-loc_FF028:				; ...
+; ---------------------------------------------------------------------------
+; Принтер готов - генерируем строб (импульс для приема данных принтером)
+; ---------------------------------------------------------------------------
+printer_is_ready:				; ...
+                ; Генерируем импульс строб через порт 61h (бит 2)
+                in	al, 61h         ; Читаем текущее состояние порта B контроллера 8255
+                or	al, 4           ; Устанавливаем бит 2 (строб в активное состояние)
+                out	61h, al         ; Записываем обратно
+                and	al, 0FBh        ; Сбрасываем бит 2 (строб в неактивное состояние)
+                out	61h, al         ; Записываем обратно
+                pop	ax              ; Восстанавливаем символ (но он больше не нужен)
+
+; ---------------------------------------------------------------------------
+; Функция 02h: Получение статуса принтера
+; Вход: DX = номер порта принтера
+; Выход: AH = статус принтера
+; ---------------------------------------------------------------------------
+get_status_func:				; ...
+                push	ax              ; Сохраняем AX (в AL может быть символ, если вызвано из 00h)
+
+read_printer_status:				; ...
+                in	al, 6Ah         ; Читаем порт статуса принтера
+                mov	ah, al          ; Копируем статус в AH
+                and	ah, 0D0h        ; Оставляем только значимые биты статуса (1101 0000b)
+
+; ---------------------------------------------------------------------------
+; Подготовка возвращаемого значения статуса в стандартном формате PC
+; ---------------------------------------------------------------------------
+prepare_status_return:				; ...
+                pop	dx              ; Восстанавливаем исходный символ из стека в DL
+                mov	al, dl          ; Копируем символ обратно в AL (для совместимости)
+                
+                ; Проверяем бит ERROR (бит 3) - на МС1502 используется инвертированная логика
+                test	ah, 10h         ; Проверяем бит 4 (на самом деле это бит ERROR?)
+                jnz	short check_timeout_bit    ; Если не 0, ошибки нет
+                
+                ; Ошибка принтера - устанавливаем соответствующий бит
+                or	ah, 8           ; Устанавливаем бит ошибки (бит 3)
+
+check_timeout_bit:				; ...
+                ; Маскируем и инвертируем биты статуса для стандартного формата PC
+                and	ah, 0E9h        ; Оставляем биты: 7(BUSY), 5(ACK), 4(ERROR), 3(SELECT), 0(TIMEOUT)
+                xor	ah, 0D0h        ; Инвертируем необходимые биты для соответствия стандарту
+                
+                ; Выход из прерывания
+                jmp	short exit_interrupt
+
+; ---------------------------------------------------------------------------
+; Функция 01h: Инициализация принтера
+; Вход: DX = номер порта принтера
+; Выход: AH = статус принтера
+; ---------------------------------------------------------------------------
+init_printer_func:				; ...
                 push	ax
-                in	al, 61h		; PC/XT	PPI port B bits:
-                                        ; 0: Tmr 2 gate	??? OR	03H=spkr ON
-                                        ; 1: Tmr 2 data	??  AND	0fcH=spkr OFF
-                                        ; 3: 1=read high switches
-                                        ; 4: 0=enable RAM parity checking
-                                        ; 5: 0=enable I/O channel check
-                                        ; 6: 0=hold keyboard clock low
-                                        ; 7: 0=enable kbrd
-                and	al, 0E3h
-                out	61h, al		; PC/XT	PPI port B bits:
-                                        ; 0: Tmr 2 gate	??? OR	03H=spkr ON
-                                        ; 1: Tmr 2 data	??  AND	0fcH=spkr OFF
-                                        ; 3: 1=read high switches
-                                        ; 4: 0=enable RAM parity checking
-                                        ; 5: 0=enable I/O channel check
-                                        ; 6: 0=hold keyboard clock low
-                                        ; 7: 0=enable kbrd
-                mov	cx, 4B0h
+                
+                ; Посылаем сигнал INIT (инициализация) через порт 61h (бит 4)
+                in	al, 61h         ; Читаем порт B контроллера 8255
+                and	al, 0E3h        ; Сбрасываем биты 2-4 (0100b = бит INIT в активном состоянии 0)
+                out	61h, al         ; Записываем - сигнал INIT в активном состоянии (0)
+                
+                ; Задержка для стабилизации сигнала INIT (примерно 1 мс при 5 МГц)
+                mov	cx, 4B0h        ; Время задержки
 
-loc_FF032:				; ...
-                loop	loc_FF032
-                in	al, 61h		; PC/XT	PPI port B bits:
-                                        ; 0: Tmr 2 gate	??? OR	03H=spkr ON
-                                        ; 1: Tmr 2 data	??  AND	0fcH=spkr OFF
-                                        ; 3: 1=read high switches
-                                        ; 4: 0=enable RAM parity checking
-                                        ; 5: 0=enable I/O channel check
-                                        ; 6: 0=hold keyboard clock low
-                                        ; 7: 0=enable kbrd
-                or	al, 10h
-                out	61h, al		; PC/XT	PPI port B bits:
-                                        ; 0: Tmr 2 gate	??? OR	03H=spkr ON
-                                        ; 1: Tmr 2 data	??  AND	0fcH=spkr OFF
-                                        ; 3: 1=read high switches
-                                        ; 4: 0=enable RAM parity checking
-                                        ; 5: 0=enable I/O channel check
-                                        ; 6: 0=hold keyboard clock low
-                                        ; 7: 0=enable kbrd
-                jmp	short loc_FF00E
+init_delay:				; ...
+                loop	init_delay
+                
+                ; Завершаем сигнал INIT
+                in	al, 61h         ; Читаем текущее состояние
+                or	al, 10h         ; Устанавливаем бит 4 - завершаем INIT (1 = неактивно)
+                out	61h, al         ; Записываем
+                
+                ; Переходим к чтению статуса
+                jmp	short read_printer_status
 
 ;--------------------------------------------------------------------------------------------------
-; Prints CR+LF on the printer
+; Вспомогательная процедура: Печать перевода строки (CR+LF) на принтере
+; Используется сервисом печати экрана (int 05h) и другими функциями BIOS
 ;--------------------------------------------------------------------------------------------------
 proc    	print_cr_lf     near
-                xor	dx, dx
-                xor	ah, ah
-                mov	al, LF
-                int	17h		; PRINTER - OUTPUT CHARACTER
-                                        ; AL = character, DX = printer port (0-3)
-                                        ; Return: AH = status bits
-                xor	ah, ah
-                mov	al, CR
-                int	17h		; PRINTER - OUTPUT CHARACTER
-                                        ; AL = character, DX = printer port (0-3)
-                                        ; Return: AH = status bits
+                xor	dx, dx          ; Порт принтера 0 (LPT1)
+                xor	ah, ah          ; Функция 00h - печать символа
+                mov	al, 0Ah         ; Код перевода строки (Line Feed)
+                int	17h             ; Вызов сервиса принтера
+                
+                xor	ah, ah          ; Снова функция 00h
+                mov	al, 0Dh         ; Код возврата каретки (Carriage Return)
+                int	17h             ; Вызов сервиса принтера
                 retn
 endp		print_cr_lf

@@ -1,788 +1,925 @@
 ;---------------------------------------------------------------------------------------------------
-; Interrupt 13h - Floppydisk
+; Прерывание 13h - Сервис дисковода (гибкие диски)
+;
+; Назначение: Обеспечивает работу с дисководом гибких дисков (5.25", 360 КБ).
+; Реализует функции чтения, записи, форматирования и управления дисководом.
+;
+; Особенности МС1502:
+;   - Использует контроллер дисковода КР1818ВГ93 (советский аналог WD1793)
+;   - Работает в режиме опроса (polling) - не использует прерывания
+;   - Поддерживает стандартные форматы IBM PC (360 КБ, 40 дорожек, 9 секторов)
+;   - Имеет механизм защиты видео памяти при операциях 
+;
+; Функции (AH):
+;   00h - Сброс дисковода
+;   01h - Получение статуса последней операции
+;   02h - Чтение секторов
+;   03h - Запись секторов
+;   04h - Проверка секторов
+;   05h - Форматирование дорожки
+;   15h - Получение типа дисковода
+;   16h - Проверка смены дискеты
 ;---------------------------------------------------------------------------------------------------
-proc		int_13h	near
-                cld
-                sti
-                push	bx
-                push	cx
-                push	dx
-                push	si
-                push	di
-                push	ds
-                push	es
-                mov	si, BDAseg
-                mov	ds, si
+proc        int_13h near
+                cld                             ; Устанавливаем направление строковых операций вперед
+                sti                             ; Разрешаем прерывания
+                push    bx                      ; Сохраняем все используемые регистры
+                push    cx
+                push    dx
+                push    si
+                push    di
+                push    ds
+                push    es
+                
+                ; Устанавливаем DS на сегмент BDA (область данных BIOS, 040h)
+                mov     si, BDAseg
+                mov     ds, si
                 assume ds:nothing
-                call	sub_FEC85
-                mov	ah, [cs:MotorOff]
-                mov	[ds:dsk_motor_tmr], ah
-                mov	ah, [ds:dsk_ret_code_]
-                cmp	ah, 1
-                cmc
-                pop	es
-                pop	ds
+                
+                ; Вызываем основной обработчик команд дисковода
+                call    process_disk_command
+                
+                ; Устанавливаем таймер выключения мотора дисковода
+                mov     ah, [cs:MotorOff]       ; Загружаем значение задержки выключения мотора
+                mov     [ds:dsk_motor_tmr], ah  ; Сохраняем в BDA
+                
+                ; Получаем код возврата операции и устанавливаем флаг переноса (CF)
+                mov     ah, [ds:dsk_ret_code_]  ; Код возврата операции
+                cmp     ah, 1                   ; Проверяем успешность (1 = успех)
+                cmc                             ; Инвертируем CF: если AH=1 -> CF=0 (успех)
+                
+                ; Восстанавливаем регистры и возвращаем управление
+                pop     es
+                pop     ds
                 assume ds:nothing
-                pop	di
-                pop	si
-                pop	dx
-                pop	cx
-                pop	bx
-                retf	2
-endp		int_13h
+                pop     di
+                pop     si
+                pop     dx
+                pop     cx
+                pop     bx
+                retf    2                       ; Возврат из прерывания с удалением флагов из стека
+endp        int_13h
 
+;---------------------------------------------------------------------------------------------------
+; Процессор команд дисковода
+; Обрабатывает результат выполнения команды и обновляет статус дисковода
+;---------------------------------------------------------------------------------------------------
+proc        process_disk_command near
+                push    dx
+                call    handle_ah_command       ; Выполняем команду в соответствии с AH
+                pop     dx
+                
+                ; Получаем номер дисковода (0 или 1) в BX
+                mov     bx, dx
+                and     bx, 1
+                
+                ; Проверяем результат выполнения команды
+                mov     ah, [ds:dsk_ret_code_]
+                cmp     ah, 40h                 ; Ошибка позиционирования?
+                jz      short toggle_drive_flag
+                cmp     ax, 400h                ; Это команда проверки секторов (AH=04h)?
+                jnz     short cmd_processor_end
+                
+                ; Для команды проверки выполняем дополнительную верификацию
+                call    verify_disk_status
+                jz      short toggle_drive_flag
+                
+                ; Обновляем статус дисковода на основе результата проверки
+                mov     al, [bx+90h]            ; Загружаем текущий статус дисковода
+                mov     ah, 0
+                test    al, 0C0h                ; Проверяем биты 6-7 (готовность/ошибка)
+                jnz     short update_drive_status
+                mov     ah, 80h                 ; Если оба бита сброшены, устанавливаем бит 7
 
+update_drive_status:
+                and     al, 3Fh                 ; Сбрасываем биты 6-7
+                or      al, ah                  ; Устанавливаем новые биты
+                mov     [bx+90h], al            ; Сохраняем обновленный статус
+                mov     al, 0
+                jmp     short cmd_processor_end
 
+toggle_drive_flag:
+                ; Переключаем бит 5 в статусе дисковода (флаг изменения состояния)
+                xor     [byte ptr bx+90h], 20h
+                mov     al, 0
 
-proc		sub_FEC85 near		; ...
-                push	dx
-                call	sub_FECC2
-                pop	dx
-                mov	bx, dx
-                and	bx, 1
-                mov	ah, [ds:dsk_ret_code_]
-                cmp	ah, 40h
-                jz	short loc_FECBA
-                cmp	ax, 400h
-                jnz	short locret_FECC1
-                call	sub_FE36C
-                jz	short loc_FECBA
-                mov	al, [bx+90h]
-                mov	ah, 0
-                test	al, 0C0h
-                jnz	short loc_FECAE
-                mov	ah, 80h
-
-loc_FECAE:				; ...
-                and	al, 3Fh
-                or	al, ah
-                mov	[bx+90h], al
-                mov	al, 0
-                jmp	short locret_FECC1
-; ---------------------------------------------------------------------------
-
-loc_FECBA:				; ...
-                xor	[byte ptr bx+90h], 20h
-                mov	al, 0
-
-locret_FECC1:				; ...
+cmd_processor_end:
                 retn
-endp		sub_FEC85
+endp        process_disk_command
 
+;---------------------------------------------------------------------------------------------------
+; Диспетчер команд по значению AH
+; Определяет и выполняет соответствующую команду дисковода
+;---------------------------------------------------------------------------------------------------
+proc        handle_ah_command near
+                ; Сбрасываем бит 7 в статусе мотора (флаг записи)
+                and     [byte ptr ds:dsk_motor_stat], 7Fh
+                
+                ; Проверяем значение AH для определения команды
+                or      ah, ah
+                jz      short reset_disk_system  ; AH=00h: Сброс дисковода
+                dec     ah
+                jz      short get_last_status    ; AH=01h: Получить статус последней операции
+                
+                ; Подготовка к выполнению операций с секторами
+                mov     [byte ptr ds:dsk_ret_code_], 0  ; Сбрасываем код возврата
+                cmp     dl, 1                    ; Проверяем номер дисковода (0 или 1)
+                ja      short invalid_command    ; Если больше 1 - недопустимый дисковод
+                
+                ; Определяем команду чтения/записи/проверки/форматирования
+                dec     ah
+                jz      short read_sectors       ; AH=02h: Чтение секторов
+                dec     ah
+                jz      short write_sectors      ; AH=03h: Запись секторов
+                dec     ah
+                jz      short verify_sectors     ; AH=04h: Проверка секторов
+                dec     ah
+                jnz     short check_extended_cmds
+                jmp     format_track             ; AH=05h: Форматирование дорожки
 
+check_extended_cmds:
+                sub     ah, 12h                  ; Проверяем расширенные команды
+                jnz     short check_drive_type_cmd
+                jmp     get_drive_type           ; AH=15h: Получить тип дисковода
 
+check_drive_type_cmd:
+                dec     ah
+                jnz     short invalid_command
+                jmp     set_diskette_change_status ; AH=16h: Проверка смены дискеты
 
-
-proc		sub_FECC2 near		; ...
-
-                and	[byte ptr ds:dsk_motor_stat], 7Fh
-                or	ah, ah
-                jz	short loc_FED01
-                dec	ah
-                jz	short loc_FED31
-                mov	[byte ptr ds:dsk_ret_code_], 0
-                cmp	dl, 1
-                ja	short loc_FECFB
-                dec	ah
-                jz	short loc_FED43
-                dec	ah
-                jz	short loc_FED3E
-                dec	ah
-                jz	short loc_FED35
-                dec	ah
-                jnz	short loc_FECEC
-                jmp	loc_FEE0E
-; ---------------------------------------------------------------------------
-
-loc_FECEC:				; ...
-                sub	ah, 12h
-                jnz	short loc_FECF4
-                jmp	loc_FEF0A
-; ---------------------------------------------------------------------------
-
-loc_FECF4:				; ...
-                dec	ah
-                jnz	short loc_FECFB
-                jmp	loc_FEF26
-; ---------------------------------------------------------------------------
-
-loc_FECFB:				; ...
-                mov	[byte ptr ds:dsk_ret_code_], 1
+invalid_command:
+                mov     [byte ptr ds:dsk_ret_code_], 1  ; Устанавливаем код ошибки: недопустимая команда
                 retn
-; ---------------------------------------------------------------------------
 
-loc_FED01:				; ...
-                mov	al, 0
-                mov	[ds:3Eh], al
-                mov	[ds:dsk_ret_code_], al
-                mov	ah, [ds:dsk_motor_stat]
-                test	ah, 3
-                jz	short loc_FED1A
-                mov	al, 4
-                shr	ah, 1
-                jb	short loc_FED1A
-                mov	al, 18h
+;---------------------------------------------------------------------------------------------------
+; Функция 00h: Сброс дисковода
+;---------------------------------------------------------------------------------------------------
+reset_disk_system:
+                mov     al, 0
+                mov     [ds:3Eh], al            ; Сбрасываем таймер мотора
+                mov     [ds:dsk_ret_code_], al  ; Сбрасываем код возврата
+                
+                ; Проверяем, работает ли мотор какого-либо дисковода
+                mov     ah, [ds:dsk_motor_stat]
+                test    ah, 3                   ; Биты 0-1: моторы дисководов 0 и 1
+                jz      short send_reset_cmd
+                
+                ; Определяем, какой дисковод активен, и формируем команду сброса
+                mov     al, 4                   ; Сброс для дисковода 0
+                shr     ah, 1                   ; Проверяем бит 0 (дисковод 0)
+                jb      short send_reset_cmd
+                mov     al, 18h                 ; Сброс для дисковода 1
 
-loc_FED1A:				; ...
-                call	sub_FE2D3
-                mov	dl, [ds:dsk_status_2]
-                out	dx, al
-                inc	ax
-                out	dx, al
-                mov	dl, [ds:dsk_status_1]
-                mov	al, 0D0h
-                out	dx, al
-                mov	dl, [ds:dsk_status_2]
-                in	al, dx
+send_reset_cmd:
+                ; Отправляем команду сброса контроллеру дисковода
+                call    get_drive_and_head      ; Получаем параметры дисковода
+                mov     dl, [ds:dsk_status_2]   ; Порт управления контроллером (3F2h для PC)
+                out     dx, al                  ; Отправляем команду сброса
+                inc     ax                      ; Выключаем сигнал сброса
+                out     dx, al
+                
+                ; Отправляем команду "принудительное прерывание" контроллеру
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния контроллера (3F4h)
+                mov     al, 0D0h                ; Код команды "Force Interrupt"
+                out     dx, al
+                
+                ; Читаем текущее состояние порта управления
+                mov     dl, [ds:dsk_status_2]
+                in      al, dx
                 retn
-; ---------------------------------------------------------------------------
 
-loc_FED31:				; ...
-                mov	al, [ds:dsk_ret_code_]
+;---------------------------------------------------------------------------------------------------
+; Функция 01h: Получение статуса последней операции
+;---------------------------------------------------------------------------------------------------
+get_last_status:
+                mov     al, [ds:dsk_ret_code_]  ; Просто возвращаем сохраненный код возврата
                 retn
-; ---------------------------------------------------------------------------
 
-loc_FED35:				; ...
-                mov	bx, 0FC00h
-                mov	es, bx
+;---------------------------------------------------------------------------------------------------
+; Функция 04h: Проверка секторов (использует логику чтения без сохранения данных)
+;---------------------------------------------------------------------------------------------------
+verify_sectors:
+                mov     bx, 0FC00h              ; Используем временную область памяти
+                mov     es, bx
                 assume es:nothing
-                mov	bh, bl
-                jmp	short loc_FED43
-; ---------------------------------------------------------------------------
+                mov     bh, bl                  ; BH = 0
+                jmp     short read_sectors      ; Используем тот же код, что и для чтения
 
-loc_FED3E:				; ...
-                or	[byte ptr ds:dsk_motor_stat], 80h
+;---------------------------------------------------------------------------------------------------
+; Функция 03h: Запись секторов
+;---------------------------------------------------------------------------------------------------
+write_sectors:
+                or      [byte ptr ds:dsk_motor_stat], 80h  ; Устанавливаем флаг операции записи
 
-loc_FED43:				; ...
-                call	sub_FE3C3
-                push	bx
-                mov	bl, 15h
-                call	sub_FE2EF
-                pop	bx
-                jnb	short loc_FED52
-                xor	al, al
+;---------------------------------------------------------------------------------------------------
+; Общая точка входа для чтения/записи секторов (AH=02h/03h/04h)
+;---------------------------------------------------------------------------------------------------
+read_sectors:
+                ; Инициализируем дисковод и включаем мотор
+                call    setup_drive_and_motor
+                push    bx
+                mov     bl, 15h                 ; Базовый код команды для чтения/записи
+                call    seek_track              ; Позиционируем головку на нужную дорожку
+                pop     bx
+                jnb     short start_transfer    ; Если позиционирование успешно
+                xor     al, al                  ; Ошибка: возвращаем 0 секторов
                 retn
-; ---------------------------------------------------------------------------
 
-loc_FED52:				; ...
-                call	sub_FE452
-                mov	ch, al
-                xor	ah, ah
-                call	sub_FE2D3
-                mov	cl, [ds:dsk_status_1]
-                add	cl, 3
-                test	[byte ptr ds:dsk_motor_stat], 80h
-                jnz	short loc_FED9E
+start_transfer:
+                ; Отключаем видео для оптимизации доступа к памяти 
+                call    disable_video_for_disk_io
+                mov     ch, al                  ; Сохраняем количество секторов в CH
+                xor     ah, ah                  ; AH будет счетчиком обработанных секторов
+                
+                ; Получаем параметры дисковода и готовим порты контроллера
+                call    get_drive_and_head
+                mov     cl, [ds:dsk_status_1]   ; Базовый порт контроллера (3F4h)
+                add     cl, 3                   ; Порт данных (3F7h)
+                
+                ; Проверяем, операция записи или чтения
+                test    [byte ptr ds:dsk_motor_stat], 80h
+                jnz     short write_sector_data
 
-loc_FED6A:				; ...
-                mov	di, bx
-                mov	al, 80h
-                mov	dl, [ds:dsk_status_1]
-                out	dx, al
-                mov	dl, [ds:dsk_status_3]
-                jmp	short loc_FED7A
-; ---------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; Чтение секторов
+;---------------------------------------------------------------------------------------------------
+read_sector_loop:
+                mov     di, bx                  ; DI указывает на текущую позицию в буфере
+                mov     al, 80h                 ; Код команды чтения сектора
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния
+                out     dx, al                  ; Отправляем команду чтения
+                mov     dl, [ds:dsk_status_3]   ; Порт данных (3F5h)
+                jmp     short read_data_byte
 
-loc_FED79:				; ...
-                stosb
+store_data_byte:
+                stosb                           ; Сохраняем прочитанный байт в буфер [ES:DI]
 
-loc_FED7A:				; ...
-                in	al, dx
-                shr	al, 1
-                xchg	dl, cl
-                in	al, dx
-                xchg	dl, cl
-                jb	short loc_FED79
-                mov	bx, di
-                mov	dl, [ds:dsk_status_1]
-                in	al, dx
-                and	al, 1Fh
-                jnz	short loc_FEDD7
-                inc	ah
-                call	sub_FEE04
-                cmp	ch, ah
-                jnz	short loc_FED6A
-                mov	al, ah
-                call	sub_FE483
+read_data_byte:
+                in      al, dx                  ; Проверяем готовность данных
+                shr     al, 1                   ; Сдвигаем бит готовности в CF
+                xchg    dl, cl                  ; Переключаемся на порт данных
+                in      al, dx                  ; Читаем байт данных
+                xchg    dl, cl                  ; Возвращаемся к порту состояния
+                jb      short store_data_byte   ; Если данные готовы, сохраняем
+                
+                ; Обновляем указатель буфера и проверяем статус команды
+                mov     bx, di
+                mov     dl, [ds:dsk_status_1]
+                in      al, dx                  ; Получаем статус выполнения
+                and     al, 1Fh                 ; Маскируем биты ошибок
+                jnz     short handle_transfer_error
+                
+                ; Увеличиваем счетчик обработанных секторов
+                inc     ah
+                call    increment_sector_number ; Переходим к следующему сектору
+                cmp     ch, ah                  ; Все секторы обработаны?
+                jnz     short read_sector_loop
+                
+                ; Чтение завершено успешно
+                mov     al, ah                  ; Возвращаем количество прочитанных секторов
+                call    restore_video_after_disk_io ; Восстанавливаем видео
                 retn
-; ---------------------------------------------------------------------------
 
-loc_FED9E:				; ...
-                push	ds
-                mov	al, 0A0h
-                mov	dl, [ds:dsk_status_1]
-                out	dx, al
-                mov	dl, [ds:dsk_status_3]
-                mov	si, es
-                mov	ds, si
+;---------------------------------------------------------------------------------------------------
+; Запись секторов
+;---------------------------------------------------------------------------------------------------
+write_sector_data:
+                push    ds
+                mov     al, 0A0h                ; Код команды записи сектора
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния
+                out     dx, al                  ; Отправляем команду записи
+                mov     dl, [ds:dsk_status_3]   ; Порт данных
+                
+                ; Настраиваем DS:SI на источник данных
+                mov     si, es
+                mov     ds, si
                 assume ds:nothing
-                mov	si, bx
+                mov     si, bx
 
-loc_FEDB0:				; ...
-                in	al, dx
-                shr	al, 1
-                lodsb
-                xchg	dl, cl
-                out	dx, al
-                xchg	dl, cl
-                jb	short loc_FEDB0
-                dec	si
-                mov	bx, si
-                pop	ds
+write_data_loop:
+                in      al, dx                  ; Проверяем готовность к приему данных
+                shr     al, 1                   ; Сдвигаем бит готовности в CF
+                lodsb                           ; Загружаем байт из [DS:SI] в AL
+                xchg    dl, cl                  ; Переключаемся на порт данных
+                out     dx, al                  ; Отправляем байт данных
+                xchg    dl, cl                  ; Возвращаемся к порту состояния
+                jb      short write_data_loop   ; Если контроллер готов принять еще
+                
+                ; Обновляем указатель буфера и восстанавливаем DS
+                dec     si                      ; Корректируем указатель (LODSB уже увеличил SI)
+                mov     bx, si
+                pop     ds
                 assume ds:nothing
-                mov	dl, [ds:dsk_status_1]
-                in	al, dx
-                and	al, 5Fh
-                jnz	short loc_FEDD7
-                inc	ah
-                call	sub_FEE04
-                cmp	ch, ah
-                jnz	short loc_FED9E
-                mov	al, ah
-                call	sub_FE483
+                
+                ; Проверяем статус выполнения
+                mov     dl, [ds:dsk_status_1]
+                in      al, dx
+                and     al, 5Fh                 ; Маскируем биты ошибок
+                jnz     short handle_transfer_error
+                
+                ; Увеличиваем счетчик записанных секторов
+                inc     ah
+                call    increment_sector_number ; Переходим к следующему сектору
+                cmp     ch, ah                  ; Все секторы обработаны?
+                jnz     short write_sector_data
+                
+                ; Запись завершена успешно
+                mov     al, ah                  ; Возвращаем количество записанных секторов
+                call    restore_video_after_disk_io ; Восстанавливаем видео
                 retn
-; ---------------------------------------------------------------------------
 
-loc_FEDD7:				; ...
-                call	sub_FE483
-                mov	bh, ah
-                test	[byte ptr ds:dsk_motor_stat], 80h
-                jz	short loc_FEDE9
-                test	al, 40h
-                mov	ah, 3
-                jnz	short loc_FEDFD
+;---------------------------------------------------------------------------------------------------
+; Обработка ошибок передачи данных
+;---------------------------------------------------------------------------------------------------
+handle_transfer_error:
+                call    restore_video_after_disk_io ; Восстанавливаем видео
+                mov     bh, ah                  ; Сохраняем количество обработанных секторов
+                
+                ; Определяем тип ошибки в зависимости от операции
+                test    [byte ptr ds:dsk_motor_stat], 80h  ; Это операция записи?
+                jz      short check_read_errors
+                
+                ; Ошибки записи
+                test    al, 40h                 ; Ошибка защиты от записи?
+                mov     ah, 3                   ; Код ошибки: дискета защищена от записи
+                jnz     short set_error_code
+                
+check_read_errors:
+                ; Ошибки чтения/верификации
+                test    al, 10h                 ; Сектор не найден?
+                mov     ah, 4                   ; Код ошибки: сектор не найден
+                jnz     short set_error_code
+                
+                test    al, 8                   ; Ошибка CRC?
+                mov     ah, 10h                 ; Код ошибки: ошибка контрольной суммы
+                jnz     short set_error_code
+                
+                test    al, 1                   ; Ошибка команды?
+                mov     ah, 80h                 ; Код ошибки: недопустимая команда
+                jnz     short set_error_code
+                
+                mov     ah, 20h                 ; Общая ошибка контроллера
 
-loc_FEDE9:				; ...
-                test	al, 10h
-                mov	ah, 4
-                jnz	short loc_FEDFD
-                test	al, 8
-                mov	ah, 10h
-                jnz	short loc_FEDFD
-                test	al, 1
-                mov	ah, 80h
-                jnz	short loc_FEDFD
-                mov	ah, 20h
-
-loc_FEDFD:				; ...
-                or	[ds:dsk_ret_code_], ah
-                mov	al, bh
+set_error_code:
+                or      [ds:dsk_ret_code_], ah  ; Устанавливаем код ошибки
+                mov     al, bh                  ; Возвращаем количество обработанных секторов
                 retn
-endp		sub_FECC2
+endp        handle_ah_command
 
-
-
-
-
-proc		sub_FEE04 near		; ...
-                mov	dl, [ds:dsk_status_1]
-                inc	dx
-                inc	dx
-                in	al, dx
-                inc	ax
-                out	dx, al
+;---------------------------------------------------------------------------------------------------
+; Увеличение номера текущего сектора
+;---------------------------------------------------------------------------------------------------
+proc        increment_sector_number near
+                mov     dl, [ds:dsk_status_1]   ; Базовый порт контроллера
+                inc     dx                      ; Регистр номера сектора (3F5h)
+                inc     dx                      ; Вероятно, 3F6h
+                in      al, dx                  ; Читаем текущий номер сектора
+                inc     ax                      ; Увеличиваем
+                out     dx, al                  ; Записываем обратно
                 retn
-endp		sub_FEE04
+endp        increment_sector_number
 
-; ---------------------------------------------------------------------------
-; START	OF FUNCTION CHUNK FOR sub_FECC2
-
-loc_FEE0E:				; ...
-                push	bx
-                or	[byte ptr ds:dsk_motor_stat], 80h
-                call	sub_FE3C3
-                mov	bl, 11h
-                call	sub_FE2EF
-                pop	si
-                jnb	short loc_FEE20
+;---------------------------------------------------------------------------------------------------
+; Функция 05h: Форматирование дорожки
+;---------------------------------------------------------------------------------------------------
+format_track:
+                push    bx
+                or      [byte ptr ds:dsk_motor_stat], 80h  ; Устанавливаем флаг записи
+                call    setup_drive_and_motor   ; Инициализируем дисковод
+                mov     bl, 11h                 ; Код команды форматирования
+                call    seek_track              ; Позиционируем головку на нужную дорожку
+                pop     si                      ; SI указывает на таблицу форматирования
+                jnb     short start_format
                 retn
-; ---------------------------------------------------------------------------
 
-loc_FEE20:				; ...
-                push	ax
-                push	bp
-                mov	ah, al
-                xor	bx, bx
-                mov	ds, bx
-                lds	bx, [ds:prn_timeout_1_]
-                mov	di, [bx+7]
-                mov	bx, BDAseg
-                mov	ds, bx
+start_format:
+                push    ax
+                push    bp
+                mov     ah, al                  ; Сохраняем номер головки
+                xor     bx, bx
+                mov     ds, bx                  ; DS = 0000h (таблица векторов прерываний)
+                lds     bx, [ds:prn_timeout_1_] ; Загружаем адрес из таблицы прерываний
+                mov     di, [bx+7]              ; Получаем смещение
+                mov     bx, BDAseg              ; Возвращаем DS в сегмент BDA
+                mov     ds, bx
                 assume ds:nothing
-                call	sub_FE452
-                call	sub_FE2D3
-                mov	dl, [ds:dsk_status_3]
-                mov	bp, dx
-                mov	dl, [ds:dsk_status_1]
-                mov	al, 0F0h
-                out	dx, al
-                add	dl, 3
-                test	[byte ptr ds:dsk_motor_stat], 20h
-                jz	short loc_FEE60
-                lods	[word ptr es:si]
-                xchg	ax, cx
+                
+                call    disable_video_for_disk_io   ; Отключаем видео
+                call    get_drive_and_head      ; Получаем параметры дисковода
+                mov     dl, [ds:dsk_status_3]   ; Порт данных контроллера
+                mov     bp, dx                  ; Сохраняем порт данных
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния
+                mov     al, 0F0h                ; Команда форматирования дорожки
+                out     dx, al                  ; Отправляем команду
+                
+                add     dl, 3                   ; Переходим на порт данных (3F7h?)
+                
+                ; Проверяем, нужен ли двойной шаг (для 80-дорожечных дискет)
+                test    [byte ptr ds:dsk_motor_stat], 20h
+                jz      short format_with_gaps
+                
+                ; Форматирование с двойным шагом
+                lods    [word ptr es:si]        ; Загружаем слово из таблицы форматирования
+                xchg    ax, cx                  ; CX = количество данных для отправки
 
-loc_FEE54:				; ...
-                xchg	bp, dx
-                in	al, dx
-                lods	[byte ptr es:si]
-                xchg	bp, dx
-                out	dx, al
-                loop	loc_FEE54
-                jmp	short loc_FEEB1
-; ---------------------------------------------------------------------------
+format_data_word:
+                xchg    bp, dx                  ; Получаем порт данных
+                in      al, dx                  ; Проверяем готовность
+                lods    [byte ptr es:si]        ; Загружаем байт данных форматирования
+                xchg    bp, dx
+                out     dx, al                  ; Отправляем байт
+                loop    format_data_word
+                jmp     short finish_format
 
-loc_FEE60:				; ...
-                mov	bx, offset unk_FEEEB
-                mov	ch, 5
-                call	sub_FEED3
+;---------------------------------------------------------------------------------------------------
+; Стандартное форматирование с промежутками (GAP)
+;---------------------------------------------------------------------------------------------------
+format_with_gaps:
+                ; Отправляем первый промежуток (GAP1)
+                mov     bx, offset format_gap1
+                mov     ch, 5                   ; 5 байт
+                call    send_format_bytes
 
-loc_FEE68:				; ...
-                mov	bx, offset unk_FEEF5
-                mov	ch, 3
-                call	sub_FEED3
-                mov	cx, 4
+format_sector_loop:
+                ; Отправляем заголовок сектора
+                mov     bx, offset format_sector_data
+                mov     ch, 3                   ; 3 байта
+                call    send_format_bytes
+                
+                ; Отправляем информацию о секторе (4 байта: C,H,R,N)
+                mov     cx, 4
+write_sector_info:
+                xchg    bp, dx                  ; Получаем порт данных
+                in      al, dx                  ; Проверяем готовность
+                lods    [byte ptr es:si]        ; Загружаем байт информации о секторе
+                xchg    bp, dx
+                out     dx, al                  ; Отправляем
+                loop    write_sector_info
+                
+                ; Отправляем промежуток после заголовка
+                push    ax
+                mov     ch, 5
+                call    send_format_bytes
+                pop     cx
+                
+                ; Заполняем сектор данными
+                mov     bx, 80h                 ; Базовый размер сектора (128 байт)
+                shl     bx, cl                  ; Умножаем на 2^N (N в CL)
+                mov     cx, bx                  ; CX = размер сектора в байтах
+                mov     bx, di                  ; BX = байт заполнения
 
-loc_FEE73:				; ...
-                xchg	bp, dx
-                in	al, dx
-                lods	[byte ptr es:si]
-                xchg	bp, dx
-                out	dx, al
-                loop	loc_FEE73
-                push	ax
-                mov	ch, 5
-                call	sub_FEED3
-                pop	cx
-                mov	bx, 80h
-                shl	bx, cl
-                mov	cx, bx
-                mov	bx, di
+fill_sector:
+                xchg    bp, dx                  ; Получаем порт данных
+                in      al, dx                  ; Проверяем готовность
+                mov     al, bh                  ; AL = байт заполнения
+                xchg    bp, dx
+                out     dx, al                  ; Отправляем байт заполнения
+                loop    fill_sector
+                
+                ; Отправляем завершающий байт сектора
+                xchg    bp, dx                  ; Получаем порт данных
+                in      al, dx                  ; Проверяем готовность
+                mov     al, 0F7h                ; Завершающий байт
+                xchg    bp, dx
+                out     dx, al
+                
+                ; Отправляем промежуток после сектора (GAP3)
+                mov     cx, di                  ; Длина промежутка
+                xor     ch, ch
+write_post_gap:
+                xchg    bp, dx                  ; Получаем порт данных
+                in      al, dx                  ; Проверяем готовность
+                mov     al, 4Eh                 ; Байт заполнения промежутка (4Eh)
+                xchg    bp, dx
+                out     dx, al
+                loop    write_post_gap
+                
+                ; Проверяем, нужно ли форматировать вторую сторону
+                dec     ah                      ; Уменьшаем счетчик головок
+                jnz     format_sector_loop      ; Если не 0, продолжаем
 
-loc_FEE8D:				; ...
-                xchg	bp, dx
-                in	al, dx
-                mov	al, bh
-                xchg	bp, dx
-                out	dx, al
-                loop	loc_FEE8D
-                xchg	bp, dx
-                in	al, dx
-                mov	al, 0F7h
-                xchg	bp, dx
-                out	dx, al
-                mov	cx, di
-                xor	ch, ch
+finish_format:
+                ; Ожидаем завершения форматирования
+                xchg    bp, dx                  ; Получаем порт данных
+                in      al, dx                  ; Проверяем состояние
+                xchg    bp, dx
+                shr     al, 1                   ; Проверяем бит DRQ (готовность данных)
+                mov     al, 4Eh                 ; Отправляем байт заполнения
+                out     dx, al
+                jb      short finish_format     ; Если DRQ установлен, продолжаем
+                
+                ; Восстанавливаем регистры и проверяем статус
+                pop     bp
+                pop     cx                      ; Восстанавливаем исходный CX
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния
+                in      al, dx                  ; Получаем финальный статус
+                and     al, 47h                 ; Маскируем биты ошибок
+                jz      short format_success
+                
+                ; Ошибка форматирования
+                sub     ah, ah                  ; 0 секторов отформатировано
+                jmp     handle_transfer_error   ; Обрабатываем ошибку
 
-loc_FEEA3:				; ...
-                xchg	bp, dx
-                in	al, dx
-                mov	al, 4Eh
-                xchg	bp, dx
-                out	dx, al
-                loop	loc_FEEA3
-                dec	ah
-                jnz	short loc_FEE68
-
-loc_FEEB1:				; ...
-                xchg	bp, dx
-                in	al, dx
-                xchg	bp, dx
-                shr	al, 1
-                mov	al, 4Eh
-                out	dx, al
-                jb	short loc_FEEB1
-                pop	bp
-                pop	cx
-                mov	dl, [ds:dsk_status_1]
-                in	al, dx
-                and	al, 47h
-                jz	short loc_FEECD
-                sub	ah, ah
-                jmp	loc_FEDD7
-; ---------------------------------------------------------------------------
-
-loc_FEECD:				; ...
-                call	sub_FE483
-                mov	al, cl
+format_success:
+                call    restore_video_after_disk_io ; Восстанавливаем видео
+                mov     al, cl                  ; Возвращаем исходное значение AL
                 retn
-; END OF FUNCTION CHUNK	FOR sub_FECC2
 
+;---------------------------------------------------------------------------------------------------
+; Отправка байтов форматирования
+;---------------------------------------------------------------------------------------------------
+proc        send_format_bytes near
+                mov     cl, [cs:bx+1]           ; Получаем счетчик повторений
 
-
-
-proc		sub_FEED3 near		; ...
-                mov	cl, [cs:bx+1]
-
-loc_FEED7:				; ...
-                xchg	bp, dx
-                in	al, dx
-                mov	al, [cs:bx]
-                xchg	bp, dx
-                out	dx, al
-                dec	cl
-                jnz	short loc_FEED7
-                inc	bx
-                inc	bx
-                dec	ch
-                jnz	short sub_FEED3
+send_byte_loop:
+                xchg    bp, dx                  ; Получаем порт данных
+                in      al, dx                  ; Проверяем готовность
+                mov     al, [cs:bx]             ; Загружаем байт для отправки
+                xchg    bp, dx
+                out     dx, al                  ; Отправляем
+                dec     cl                      ; Уменьшаем счетчик
+                jnz     short send_byte_loop    ; Повторяем, если не 0
+                
+                inc     bx                      ; Переходим к следующему элементу таблицы
+                inc     bx
+                dec     ch                      ; Уменьшаем счетчик блоков
+                jnz     short send_format_bytes ; Продолжаем, если есть еще блоки
                 retn
-endp		sub_FEED3
+endp        send_format_bytes
 
-; ---------------------------------------------------------------------------
-unk_FEEEB	db  4Eh	; N		; ...
-                db  10h
-                db    0
-                db  0Ch
-                db 0F6h	; ?
-                db    3
-                db 0FCh	; ?
-                db    1
-                db  4Eh	; N
-                db  32h	; 2
-unk_FEEF5	db    0			; ...
-                db  0Ch
-                db 0F5h	; ?
-                db    3
-                db 0FEh	; ?
-                db    1
-                db 0F7h	; ?
-                db    1
-                db  4Eh	; N
-                db  16h
-                db    0
-                db  0Ch
-                db 0F5h	; ?
-                db    3
-                db 0FBh	; ?
-                db    1
+;---------------------------------------------------------------------------------------------------
+; Таблицы данных для форматирования
+;---------------------------------------------------------------------------------------------------
+format_gap1        db  4Eh, 10h, 0, 0Ch, 0F6h, 3, 0FCh, 1, 4Eh, 32h
+format_sector_data db  0, 0Ch, 0F5h, 3, 0FEh, 1, 0F7h, 1, 4Eh, 16h, 0, 0Ch, 0F5h, 3, 0FBh, 1
 
-data_37	db  93h	; ?
-                db  74h	; t
-                db  15h
-                db  97h	; ?
-                db  17h
-; ---------------------------------------------------------------------------
-; START	OF FUNCTION CHUNK FOR sub_FECC2
+;---------------------------------------------------------------------------------------------------
+; Таблица типов дисководов
+;---------------------------------------------------------------------------------------------------
+drive_type_table db  93h, 74h, 15h, 97h, 17h
 
-loc_FEF0A:				; ...
-                dec	ax
-                cmp	al, 5
-                jb	short loc_FEF12
-                jmp	loc_FECFB
-; ---------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; Функция 15h: Получение типа дисковода
+;---------------------------------------------------------------------------------------------------
+get_drive_type:
+                dec     ax                      ; AL = AL - 1 (индекс подфункции)
+                cmp     al, 5                   ; Проверяем допустимый диапазон
+                jb      short get_drive_type_code
+                jmp     invalid_command         ; Недопустимая подфункция
 
-loc_FEF12:				; ...
-                mov	bx, ax
-                and	bx, 7
-                mov	al, data_37[bx]
+get_drive_type_code:
+                mov     bx, ax
+                and     bx, 7                   ; Индекс в таблице (0-7)
+                mov     al, drive_type_table[bx] ; Получаем код типа дисковода
 
-loc_FEF1C:
-                mov	bx, dx
-                and	bx, 1
-                mov	[bx+90h], al
+store_drive_type:
+                mov     bx, dx
+                and     bx, 1                   ; Номер дисковода (0 или 1)
+                mov     [bx+90h], al            ; Сохраняем в области данных BIOS
                 retn
-; ---------------------------------------------------------------------------
 
-loc_FEF26:				; ...
-                mov	al, 2
-                cmp	cx, 2709h
-                jz	short loc_FEF12
-                inc	ax
-                cmp	cx, 4F0Fh
-                jz	short loc_FEF12
-                inc	ax
-                cmp	cx, 4F09h
-                jz	short loc_FEF12
-                inc	ax
-                cmp	cx, 4F12h
-                jz	short loc_FEF12
-                jmp	loc_FECFB
+;---------------------------------------------------------------------------------------------------
+; Функция 16h: Проверка смены дискеты
+;---------------------------------------------------------------------------------------------------
+set_diskette_change_status:
+                mov     al, 2                   ; Предполагаем 360K дисковод
+                cmp     cx, 2709h               ; 39 дорожек (27h), 9 секторов (360K)
+                jz      short get_drive_type_code
+                inc     ax                      ; AL = 3 (1.2M)
+                cmp     cx, 4F0Fh               ; 79 дорожек (4Fh), 15 секторов (1.2M)
+                jz      short get_drive_type_code
+                inc     ax                      ; AL = 4 (720K)
+                cmp     cx, 4F09h               ; 79 дорожек, 9 секторов (720K)
+                jz      short get_drive_type_code
+                inc     ax                      ; AL = 5 (1.44M)
+                cmp     cx, 4F12h               ; 79 дорожек, 18 секторов (1.44M)
+                jz      short get_drive_type_code
+                jmp     invalid_command         ; Неподдерживаемый формат
 
-; ---------------------------------------------------------------------------
+;---------------------------------------------------------------------------------------------------
+; Позиционирование головки на указанную дорожку
+;---------------------------------------------------------------------------------------------------
+proc        seek_track near
+                push    ax
+                push    cx
+                mov     ax, si                  ; Маска дисковода
+                inc     ax                      ; Преобразуем в битовую маску
+                mov     ah, ch                  ; Номер дорожки
+                
+                ; Проверяем, нужна ли рекалибровка дисковода
+                test    [ds:dsk_recal_stat], al
+                jnz     short skip_recalibrate
+                call    recalibrate_drive       ; Выполняем рекалибровку
+                jnb     short set_recalibrated
+                pop     cx
+                jmp     short seek_error
 
-proc		sub_FE2EF near		; ...
-                push	ax
-                push	cx
-                mov	ax, si
-                inc	ax
-                mov	ah, ch
-                test	[ds:dsk_recal_stat], al
-                jnz	short loc_FE308
-                call	sub_FE394
-                jnb	short loc_FE304
-                pop	cx
-                jmp	short loc_FE36A
-; ---------------------------------------------------------------------------
-; dsk_status ?
-loc_FE304:				; ...
-                or	[ds:dsk_recal_stat], al
+set_recalibrated:
+                or      [ds:dsk_recal_stat], al ; Устанавливаем флаг рекалибровки
 
-loc_FE308:				; ...
-                mov	al, ah
-                call	sub_FE2D3
-                mov	dl, [ds:dsk_status_1]
-                inc	dx
-                out	dx, al
-                mov	cl, [ds:dsk_status_7]
-                shl	al, cl
-                cmp	al, [si+dsk_status_5]
-                jz	short loc_FE360
-                inc	dx
-                inc	dx
-                out	dx, al
-                xchg al, [si+dsk_status_5]
-                dec	dx
-                dec	dx
-                out	dx, al
-                dec	dx
-                mov	al, 10h
-                out	dx, al
-                call	sub_FE2DD
-                mov	al, ah
-                mov	dl, [ds:dsk_status_1]
-                inc	dx
-                out	dx, al
-                test	[byte ptr ds:dsk_motor_stat], 80h
-                jz	short loc_FE360
-                inc	dx
-                inc	dx
-                out	dx, al
-                mov	dl, [ds:dsk_status_1]
-                mov	al, bl
-                out	dx, al
-                mov	dl, [ds:dsk_status_3]
-                in	al, dx
-                mov	dl, [ds:dsk_status_1]
-                in	al, dx
-                and	al, 19h
-                jz	short loc_FE360
-                or	[byte ptr ds:dsk_ret_code_], 40h
-                stc
-                pop	cx
-                jmp	short loc_FE36A
-; ---------------------------------------------------------------------------
+skip_recalibrate:
+                ; Устанавливаем номер дорожки в контроллере
+                mov     al, ah                  ; Номер дорожки
+                call    get_drive_and_head
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния
+                inc     dx                      ; Регистр дорожки (3F5h)
+                out     dx, al                  ; Устанавливаем дорожку
+                
+                ; Проверяем, нужно ли менять головку
+                mov     cl, [ds:dsk_status_7]   ; Сдвиг для выбора головки
+                shl     al, cl                  ; Сдвигаем бит головки
+                cmp     al, [si+dsk_status_5]   ; Сравниваем с текущей головкой
+                jz      short set_sector_number ; Если та же головка, пропускаем
+                
+                ; Меняем головку
+                inc     dx
+                inc     dx                      ; Регистр выбора головки (3F7h?)
+                out     dx, al                  ; Устанавливаем новую головку
+                xchg    al, [si+dsk_status_5]   ; Меняем местами с текущей
+                dec     dx
+                dec     dx                      ; Возвращаемся к регистру дорожки
+                out     dx, al                  ; Записываем старую дорожку
+                dec     dx                      ; Возвращаемся к порту состояния
+                mov     al, 10h                 ; Команда поиска (Seek)
+                out     dx, al
+                call    wait_for_controller     ; Ждем завершения поиска
+                
+                ; Еще раз устанавливаем дорожку
+                mov     al, ah
+                mov     dl, [ds:dsk_status_1]
+                inc     dx
+                out     dx, al
+                
+                ; Если это операция записи, отправляем команду
+                test    [byte ptr ds:dsk_motor_stat], 80h
+                jz      short set_sector_number
+                inc     dx
+                inc     dx                      ; Регистр головки
+                out     dx, al
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния
+                mov     al, bl                  ; Код команды
+                out     dx, al                  ; Отправляем команду
+                
+                ; Проверяем статус
+                mov     dl, [ds:dsk_status_3]   ; Порт данных
+                in      al, dx
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния
+                in      al, dx
+                and     al, 19h                 ; Маскируем ошибки
+                jz      short set_sector_number
+                or      [byte ptr ds:dsk_ret_code_], 40h ; Ошибка поиска
+                stc                             ; Устанавливаем флаг ошибки
+                pop     cx
+                jmp     short seek_error
 
-loc_FE360:				; ...
-                pop	cx
-                mov	al, cl
-                mov	dl, [ds:dsk_status_1]
-                inc	dx
-                inc	dx
-                out	dx, al
+set_sector_number:
+                pop     cx
+                mov     al, cl                  ; Номер сектора
+                mov     dl, [ds:dsk_status_1]
+                inc     dx
+                inc     dx                      ; Регистр сектора (3F6h?)
+                out     dx, al                  ; Устанавливаем сектор
 
-loc_FE36A:				; ...
-                pop	ax
+seek_error:
+                pop     ax
                 retn
-endp		sub_FE2EF
+endp        seek_track
 
-proc		sub_FE3C3 near		; ...
-                push	ax
-                push	cx
-                and	dl, 1
-                mov	si, dx
-                and	si, 1
-                mov	cl, dl
-                inc	cx
-                mov	[byte ptr ds:dsk_status_7], 0
-                test	[byte ptr si+90h], 10h
-                jnz	short loc_FE3E1
-                mov	[byte ptr si+0090h], 17h
+;---------------------------------------------------------------------------------------------------
+; Инициализация дисковода и мотора
+;---------------------------------------------------------------------------------------------------
+proc        setup_drive_and_motor near
+                push    ax
+                push    cx
+                and     dl, 1                   ; Номер дисковода (0 или 1)
+                mov     si, dx
+                and     si, 1                   ; Индекс для информации о дисководе
+                mov     cl, dl
+                inc     cx                      ; Маска мотора (1 << номер_дисковода)
+                
+                ; Сбрасываем сдвиг головки
+                mov     [byte ptr ds:dsk_status_7], 0
+                
+                ; Проверяем флаг двойного шага
+                test    [byte ptr si+90h], 10h
+                jnz     short check_track_limit
+                mov     [byte ptr si+0090h], 17h ; Устанавливаем стандартные параметры
 
-loc_FE3E1:				; ...
-                test	[byte ptr si+0090h], 20h
-                jz	short loc_FE3F8
-                cmp	ch, 2Ch
-                jnb	short loc_FE3F3
-                inc	[byte ptr ds:dsk_status_7]
-                jmp	short loc_FE3F8
-; ---------------------------------------------------------------------------
+check_track_limit:
+                ; Проверяем, работает ли дисковод с дорожками выше 43
+                test    [byte ptr si+0090h], 20h
+                jz      short prepare_motor_cmd
+                cmp     ch, 2Ch                  ; Дорожка 44 (2Ch = 44)
+                jnb     short clear_high_track_flag
+                inc     [byte ptr ds:dsk_status_7] ; Устанавливаем сдвиг для высоких дорожек
+                jmp     short prepare_motor_cmd
 
-loc_FE3F3:				; ...
-                and	[byte ptr si+90h], 0DFh
+clear_high_track_flag:
+                and     [byte ptr si+90h], 0DFh  ; Сбрасываем флаг высоких дорожек
 
-loc_FE3F8:				; ...
-                mov	al, 82h
-                test	[byte ptr ds:dsk_motor_stat], 40h
-                jz	short loc_FE404
-                xor	dl, 1
+prepare_motor_cmd:
+                ; Формируем команду управления мотором и выбором дисковода
+                mov     al, 82h                 ; Базовое управление для дисковода 0
+                test    [byte ptr ds:dsk_motor_stat], 40h ; Проверяем переключение дисководов
+                jz      short select_drive
+                xor     dl, 1                   ; Меняем дисковод
 
-loc_FE404:				; ...
-                test	dl, 1
-                jz	short loc_FE40B
-                mov	al, 8Ch
+select_drive:
+                test    dl, 1                   ; Это дисковод 1?
+                jz      short set_motor_bits
+                mov     al, 8Ch                 ; Управление для дисковода 1
 
-loc_FE40B:				; ...
-                or	al, dh
-                test	[byte ptr si+90h], 0C0h
-                jnz	short loc_FE416
-                or	al, 10h
+set_motor_bits:
+                or      al, dh                  ; Добавляем бит выбора головки
+                test    [byte ptr si+90h], 0C0h ; Проверяем тип дисковода
+                jnz     short send_motor_cmd
+                or      al, 10h                 ; Устанавливаем бит двойной плотности
 
-loc_FE416:				; ...
-                rol	al, 1
-                call	sub_FE2D3
-                mov	ah, 0FFh
-                mov	[ds:dsk_motor_tmr], ah
+send_motor_cmd:
+                rol     al, 1                   ; Форматируем команду для контроллера
+                call    get_drive_and_head
+                mov     ah, 0FFh
+                mov     [ds:dsk_motor_tmr], ah  ; Устанавливаем таймер мотора
+                inc     ah                      ; AH = 0
+                mov     dl, [ds:dsk_status_2]   ; Порт управления (3F2h)
+                out     dx, al                  ; Включаем мотор и выбираем дисковод
+                in      al, dx                  ; Читаем обратно
+                
+                ; Отправляем команду "принудительное прерывание"
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния
+                mov     al, 0D0h
+                out     dx, al
+                
+                ; Проверяем, был ли мотор уже включен
+                test    [ds:dsk_motor_stat], cl
+                jnz     short motor_ready
 
-                inc	ah
-                mov	dl, [ds:dsk_status_2]
-                out	dx, al
-                in	al, dx
-                mov	dl, [ds:dsk_status_1]
-                mov	al, 0D0h
-                out	dx, al
-                test	[ds:dsk_motor_stat], cl
-                jnz	short loc_FE446
+spinup_wait:
+                ; Ждем раскрутки мотора
+                mov     al, [ds:dsk_motor_tmr]
+                sub     al, ah
+                not     al
+                shr     al, 1
+                cmp     al, [cs:MotorOn]        ; Время раскрутки
+                jb      short spinup_wait
 
-loc_FE436:				; ...
-                mov	al, [ds:dsk_motor_tmr]
-                sub	al, ah
-                not	al
-                shr	al, 1
-                cmp	al, [cs:MotorOn]
-                jb	short loc_FE436
-
-loc_FE446:				; ...
-                and	[byte ptr ds:dsk_motor_stat], 0FCh
-                or	[ds:dsk_motor_stat], cl
-                pop	cx
-                pop	ax
+motor_ready:
+                ; Обновляем статус мотора
+                and     [byte ptr ds:dsk_motor_stat], 0FCh ; Сбрасываем биты дисководов
+                or      [ds:dsk_motor_stat], cl ; Устанавливаем бит текущего дисковода
+                pop     cx
+                pop     ax
                 retn
-endp		sub_FE3C3
+endp        setup_drive_and_motor
 
-proc		sub_FE2D3 near		; ...
-                mov	dh, [ds:dsk_status_4]
-                dec	dh
-                and	dh, 1
+;---------------------------------------------------------------------------------------------------
+; Получение параметров дисковода и головки
+;---------------------------------------------------------------------------------------------------
+proc        get_drive_and_head near
+                mov     dh, [ds:dsk_status_4]   ; Параметр головки
+                dec     dh
+                and     dh, 1                   ; Головка 0 или 1
                 retn
-endp		sub_FE2D3
+endp        get_drive_and_head
 
+;---------------------------------------------------------------------------------------------------
+; Ожидание готовности контроллера
+;---------------------------------------------------------------------------------------------------
+proc        wait_for_controller near
+                push    ax
+                mov     [byte ptr ds:dsk_motor_tmr], 0FFh ; Сбрасываем таймер мотора
 
-
-
-
-proc		sub_FE2DD near		; ...
-                push ax
-                mov	[byte ptr ds:dsk_motor_tmr], 0FFh ; dsk_motor_tmr
-                mov	[byte ptr ds:dsk_motor_tmr], 0FFh ; dsk_motor_tmr
-
-loc_FE2E8:				; ...
-                in	al, dx
-                shr	al, 1
-                jb	short loc_FE2E8
-                pop	ax
+wait_loop:
+                in      al, dx                  ; Читаем статус
+                shr     al, 1                   ; Проверяем бит готовности
+                jb      short wait_loop         ; Если не готов, ждем
+                pop     ax
                 retn
-endp		sub_FE2DD
+endp        wait_for_controller
 
+;---------------------------------------------------------------------------------------------------
+; Проверка статуса дисковода
+;---------------------------------------------------------------------------------------------------
+proc        verify_disk_status near
+                mov     al, 0D0h                ; Команда "принудительное прерывание"
+                call    get_drive_and_head
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния
+                out     dx, al                  ; Отправляем команду
+                call    wait_for_controller     ; Ждем
+                mov     al, 0C0h                ; Команда "определить статус прерывания"
+                out     dx, al
+                mov     ah, 3
+                add     ah, dl                  ; AH = адрес порта данных
 
+read_id_loop:
+                mov     dl, [ds:dsk_status_3]   ; Порт данных
+                in      al, dx                  ; Проверяем готовность
+                shr     al, 1
+                mov     dl, ah                  ; Переключаемся на порт данных
+                in      al, dx                  ; Читаем байт идентификации
+                jb      short read_id_loop      ; Продолжаем, пока есть данные
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния
+                in      al, dx                  ; Получаем финальный статус
+                and     al, 10h                 ; Проверяем бит ошибки
+                retn                            ; ZF = 1, если нет ошибки
+endp        verify_disk_status
 
+;---------------------------------------------------------------------------------------------------
+; Рекалибровка дисковода (возврат головки на нулевую дорожку)
+;---------------------------------------------------------------------------------------------------
+proc        recalibrate_drive near
+                push    ax
+                mov     dl, [ds:dsk_status_2]   ; Порт управления
+                in      al, dx                  ; Читаем текущее состояние
+                mov     dl, [ds:dsk_status_1]   ; Порт состояния
+                mov     al, 0D0h                ; Команда "принудительное прерывание"
+                out     dx, al
+                call    wait_for_controller     ; Ждем
+                mov     al, 9                   ; Команда рекалибровки
+                out     dx, al
+                call    wait_for_controller     ; Ждем
+                in      al, dx                  ; Получаем статус
+                and     al, 5                   ; Маскируем биты
+                cmp     al, 4                   ; Проверяем успешность
+                jz      short recalibrate_ok
+                or      [byte ptr ds:dsk_ret_code_], 80h ; Устанавливаем ошибку таймаута
+                stc                             ; Устанавливаем флаг ошибки
 
-
-
-
-
-
-proc		sub_FE36C near		; ...
-                mov	al, 0D0h
-                call	sub_FE2D3
-                mov	dl, [ds:dsk_status_1]
-                out	dx, al
-                call	sub_FE2DD
-                mov	al, 0C0h
-                out	dx, al
-                mov	ah, 3
-                add	ah, dl
-
-loc_FE380:				; ...
-                mov	dl, [ds:dsk_status_3]
-                in	al, dx
-                shr	al, 1
-                mov	dl, ah
-                in	al, dx
-                jb	short loc_FE380
-                mov	dl, [ds:dsk_status_1]
-                in	al, dx
-                and	al, 10h
+recalibrate_ok:
+                mov     dl, [ds:dsk_status_2]   ; Порт управления
+                in      al, dx                  ; Читаем обратно
+                mov     [byte ptr si+0046h], 0  ; Сбрасываем счетчик повторов
+                pop     ax
                 retn
-endp		sub_FE36C
+endp        recalibrate_drive
 
+;---------------------------------------------------------------------------------------------------
+; Временное отключение видео для операций с дисководом
+;---------------------------------------------------------------------------------------------------
+proc        disable_video_for_disk_io near
+                cli                             ; Запрещаем прерывания
+                push    ax
+                mov     al, [ds:video_mode_reg_] ; Текущий видео режим
+                test    al, 1                   ; Цветной режим CGA?
+                jz      short video_check_done  ; Если монохромный - не отключаем
+                
+                ; Вычисляем физический адрес буфера данных дисковода
+                mov     ax, es
+                push    cx
+                mov     cl, 4
+                push    bx
+                shr     bx, cl                  ; Преобразуем смещение в параграфы
+                add     ax, bx                  ; AX = физический сегмент буфера
+                pop     bx
+                pop     cx
+                
+                ; Проверяем, не находится ли буфер в области видеопамяти
+                push    ax
+                mov     ax, [ds:0013h]          ; Размер ОЗУ в КБ (BIOS data area)
+                cmp     ax, 0060h               ; 96 КБ? (типично для МС1502)
+                pop     ax
+                ja      short check_buffer_addr
+                mov     al, 0                   ; Мало ОЗУ, не отключаем видео
+                jmp     short set_video_state
 
+check_buffer_addr:
+                ; В МС1502 видеопамять обычно расположена начиная с B800h (цветной)
+                ; или B000h (монохромный). Проверяем, не попадает ли буфер в эту область
+                cmp     ax, 0B800h              ; Нижняя граница цветной видеопамяти?
+                jb      short video_check_done  ; Буфер ниже видеопамяти - OK
+                cmp     ax, 0C000h              ; Верхняя граница видеопамяти?
+                jnb     short video_check_done  ; Буфер выше видеопамяти - OK
+                
+                ; Буфер попадает в область видеопамяти - ВЫКЛЮЧАЕМ видео
+                mov     al, 0                   ; Флаг: нужно отключить видео
 
+set_video_state:
+                sti                             ; Разрешаем прерывания
+                push    ax
+                mov     al, [ds:video_mode_reg_] ; Текущий видео режим
+                ; Отключение видео в CGA:
+                ; Порт 3D8h - управление режимом CGA
+                ; Бит 3 = 0: отключить видео
+                and     al, 0F7h                ; Сбрасываем бит 3 (разрешение видео)
+                mov     dx, 3D8h
+                out     dx, al
+                pop     ax
 
-
-proc		sub_FE394 near		; ...
-                push	ax
-                mov	dl, [ds:dsk_status_2]
-                in	al, dx
-                mov	dl, [ds:dsk_status_1]
-                mov	al, 0D0h
-                out	dx, al
-                call	sub_FE2DD
-                mov	al, 9
-                out	dx, al
-                call	sub_FE2DD
-                in	al, dx
-                and	al, 5
-                cmp	al, 4
-                jz	short loc_FE3B7
-                or	[byte ptr ds:dsk_ret_code_], 80h
-                stc
-
-loc_FE3B7:				; ...
-                mov	dl, [ds:dsk_status_2]
-                in	al, dx
-                mov	[byte ptr si+0046h], 0
-                pop	ax
+video_check_done:
+                pop     ax
                 retn
-endp		sub_FE394
+endp        disable_video_for_disk_io
 
-proc		sub_FE452 near		; ...
-                cli
-                push	ax
-                mov	al, [ds:video_mode_reg_]
-                test	al, 1
-                jz	short loc_FE48C
-                mov	ax, es
-                push	cx
-                mov	cl, 4
-                push	bx
-                shr	bx, cl
-                add	ax, bx
-                pop	bx
-                pop	cx
-                push	ax
-                mov	ax, [ds:0013h] ; main_ram_size
-                cmp	ax, 0060h  ; 96 kb
-                pop	ax
-                ja	short loc_FE475
-                mov	al, 0
-                jmp	short loc_FE488
-; ---------------------------------------------------------------------------
-
-loc_FE475:				; ...
-                cmp	ax, 7EC0h
-                jb	short loc_FE48C
-                cmp	ax, 0C000h
-                jnb	short loc_FE48C
-                mov	al, 0
-                jmp	short loc_FE488
-endp		sub_FE452
-
-
-
-
-
-proc		sub_FE483 near		; ...
-                sti
-                push	ax
-                mov	al, [ds:video_mode_reg_]
-
-loc_FE488:				; ...
-                mov	dx, 3D8h
-                out	dx, al
-
-loc_FE48C:				; ...
-                pop	ax
+;---------------------------------------------------------------------------------------------------
+; Восстановление видео после операций с дисководом
+;---------------------------------------------------------------------------------------------------
+proc        restore_video_after_disk_io near
+                sti                             ; Разрешаем прерывания
+                push    ax
+                mov     al, [ds:video_mode_reg_] ; Восстанавливаем оригинальный видео режим
+                mov     dx, 3D8h                ; Порт управления видео CGA
+                or      al, 08h                 ; Устанавливаем бит 3 (включаем видео)
+                out     dx, al                  ; Восстанавливаем видео
+                pop     ax
                 retn
-endp		sub_FE483
-
+endp        restore_video_after_disk_io

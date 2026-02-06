@@ -1180,34 +1180,3 @@ send_ax:
 
 endp	set_cursor
 
-;--------------------------------------------------------------------------------------------------
-; Initialize video card
-;--------------------------------------------------------------------------------------------------
-proc	video_init	near
-
-	mov	ah, [ds:10h]			; Get equipment byte
-	and	ah, 00110000b			;   extract CRT
-	mov	al, 3				;   null low
-	cmp	ah, 00110000b			; Monochrome?
-	jz	@@init				;   yes
-	mov	al, 3				; CGA 40 x 25?
-	cmp	ah, 00010000b			;   yes
-	jz	@@init				; CGA 80 x 25?
-	mov	al, 3				;   yes
-@@init:
-	mov	ah, 0				; Setup subfunction
-	int	10h				;   to video
-	ret
-
-endp	video_init
-
-
-unk_FEF8F:
-                db    0	;
-                db  20h ;
-                db    1 ;
-                db  21h	;
-                db  40h	;
-                db  60h	;
-                db  41h	;
-                db  61h	;
