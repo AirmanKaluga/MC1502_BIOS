@@ -1,651 +1,462 @@
 ;---------------------------------------------------------------------------------------------------
-; Œ·‡·ÓÚ˜ËÍ ÔÂ˚‚‡ÌËˇ 09h - ÍÎ‡‚Ë‡ÚÛ‡ (IRQ1)
+; Interrupt 09h - keyaboard IRQ1
 ;---------------------------------------------------------------------------------------------------
-proc		int_09h	near
-                sti					; –‡ÁÂ¯‡ÂÏ ÔÂ˚‚‡ÌËˇ
-                push	ax				; —Óı‡ÌˇÂÏ Â„ËÒÚ˚
-                push	bx
-                push	cx
-                push	dx
-                push	si
-                push	di
-                push	ds
-                push	es
-                cld					; Õ‡Ô‡‚ÎÂÌËÂ ÒÚÓÍÓ‚˚ı ÓÔÂ‡ˆËÈ - ‚ÔÂÂ‰
-                
-                ; ”ÒÚ‡Ì‡‚ÎË‚‡ÂÏ ÒÂ„ÏÂÌÚ ‰‡ÌÌ˚ı BDA (Ó·Î‡ÒÚ¸ ‰‡ÌÌ˚ı BIOS)
-                mov	ax, BDAseg
-                mov	ds, ax
+proc		int_09h
+                sti				; –†–∞–∑—Ä–µ—à–∏—Ç—å –ø—Ä–µ—Ä—ã–≤–∞–Ω–∏—è
+                push	ax			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å AX
+                push	bx			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å BX
+                push	cx			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å CX
+                push	dx			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å DX
+                push	si			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å SI
+                push	di			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å DI
+                push	ds			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å DS
+                push	es			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å ES
+                cld				; –°–±—Ä–æ—Å–∏—Ç—å —Ñ–ª–∞–≥ –Ω–∞–ø—Ä–∞–≤–ª–µ–Ω–∏—è
+                mov	ax, BDAseg		; AX = —Å–µ–≥–º–µ–Ω—Ç BDA (40h)
+                mov	ds, ax			; DS = —Å–µ–≥–º–µ–Ω—Ç BDA
                 assume ds:nothing
-                
-                ; ◊ËÚ‡ÂÏ ÒÍ‡Ì-ÍÓ‰ ËÁ ÍÓÌÚÓÎÎÂ‡ ÍÎ‡‚Ë‡ÚÛ˚ (ÔÓÚ 60h)
-                in	al, 60h		; 8042 - ÍÓÌÚÓÎÎÂ ÍÎ‡‚Ë‡ÚÛ˚, Â„ËÒÚ ‰‡ÌÌ˚ı
-                mov	ah, al		; —Óı‡ÌˇÂÏ ÒÍ‡Ì-ÍÓ‰ ‚ AH
-                
-                ; œÓ‚ÂˇÂÏ Ì‡ Ò·ÓÈ ÍÎ‡‚Ë‡ÚÛ˚ (ÍÓ‰ FFh)
-                cmp	al, 0FFh
-                jnz	short normal_key	; ≈ÒÎË ÌÂ FFh - ÌÓÏ‡Î¸Ì‡ˇ ÍÎ‡‚Ë¯‡
-                jmp	keyboard_error		; Œ·‡·ÓÚÍ‡ Ó¯Ë·ÍË ÍÎ‡‚Ë‡ÚÛ˚
-                
+                in	al, 60h			; –ü—Ä–æ—á–∏—Ç–∞—Ç—å —Å–∫–∞–Ω-–∫–æ–¥ –∏–∑ –ø–æ—Ä—Ç–∞ 60h
+                mov	ah, al			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å –∫–æ–ø–∏—é —Å–∫–∞–Ω-–∫–æ–¥–∞ –≤ AH
+                cmp	al, 0FFh		; –°–∫–∞–Ω-–∫–æ–¥ —Ä–∞–≤–µ–Ω FFh (–æ—à–∏–±–∫–∞/–ø–µ—Ä–µ–ø–æ–ª–Ω–µ–Ω–∏–µ)?
+                jnz	short scan_code_ok	; –ù–µ—Ç ‚Äì –Ω–æ—Ä–º–∞–ª—å–Ω–∞—è –æ–±—Ä–∞–±–æ—Ç–∫–∞
+                jmp	queue_full		; –î–∞ ‚Äì –∑–≤—É–∫–æ–≤–æ–π —Å–∏–≥–Ω–∞–ª –∏ –≤—ã—Ö–æ–¥
 ; ---------------------------------------------------------------------------
-; Œ·‡·ÓÚÍ‡ ÌÓÏ‡Î¸ÌÓÈ ÍÎ‡‚Ë¯Ë
-; ---------------------------------------------------------------------------
-normal_key:				; ...
-                ; Ã‡ÒÍËÛÂÏ ·ËÚ ÓÚÔÛÒÍ‡ÌËˇ (7-È ·ËÚ) ‰Îˇ ÔÓËÒÍ‡ ‚ Ú‡·ÎËˆÂ
-                and	al, 7Fh
-                
-                ; ”ÒÚ‡Ì‡‚ÎË‚‡ÂÏ ES Ì‡ ÒÂ„ÏÂÌÚ ÍÓ‰‡ ‰Îˇ ‰ÓÒÚÛÔ‡ Í Ú‡·ÎËˆ‡Ï
-                push	cs
-                pop	es
-                assume es:nothing
-                
-                ; »˘ÂÏ ÒÍ‡Ì-ÍÓ‰ ‚ Ú‡·ÎËˆÂ ÒÔÂˆË‡Î¸Ì˚ı ÍÎ‡‚Ë¯
-                mov	di, offset special_keys_table
-                mov	cx, 8
-                repne scasb		; »˘ÂÏ AL ‚ Ú‡·ÎËˆÂ
-                mov	al, ah		; ¬ÓÒÒÚ‡Ì‡‚ÎË‚‡ÂÏ ÔÓÎÌ˚È ÒÍ‡Ì-ÍÓ‰
-                jz	short is_special_key	; Õ‡¯ÎË ‚ Ú‡·ÎËˆÂ ÒÔÂˆË‡Î¸Ì˚ı ÍÎ‡‚Ë¯
-                jmp	process_normal_key	; ÕÂ Ì‡¯ÎË - Ó·˚˜Ì‡ˇ ÍÎ‡‚Ë¯‡
-                
-; ---------------------------------------------------------------------------
-; Œ·‡·ÓÚÍ‡ ÒÔÂˆË‡Î¸ÌÓÈ ÍÎ‡‚Ë¯Ë (ÛÔ‡‚Îˇ˛˘ËÂ ÍÎ‡‚Ë¯Ë)
-; ---------------------------------------------------------------------------
-is_special_key:				; ...
-                ; ¬˚˜ËÒÎˇÂÏ ËÌ‰ÂÍÒ ‚ Ú‡·ÎËˆÂ ÙÎ‡„Ó‚ ÒÔÂˆË‡Î¸Ì˚ı ÍÎ‡‚Ë¯
-                sub	di, offset special_keys_table + 1
-                mov	ah, cs:special_key_flags[di]
-                
-                ; œÓ‚ÂˇÂÏ, ÓÚÔÛÒÍ‡ÌËÂ ËÎË Ì‡Ê‡ÚËÂ ÍÎ‡‚Ë¯Ë (·ËÚ 7)
-                test	al, 80h
-                jnz	short key_released	;  Î‡‚Ë¯‡ ÓÚÔÛ˘ÂÌ‡
-                
-                ;  Î‡‚Ë¯‡ Ì‡Ê‡Ú‡ - Ó·‡·ÓÚÍ‡ ‚ Á‡‚ËÒËÏÓÒÚË ÓÚ ÚËÔ‡
-                cmp	ah, 10h			; œÓ‚ÂˇÂÏ ÚËÔ ÍÎ‡‚Ë¯Ë
-                jnb	short toggle_key	; ≈ÒÎË >= 10h - ÔÂÂÍÎ˛˜‡ÂÏ‡ˇ ÍÎ‡‚Ë¯‡
-                
-                ; Œ·˚˜Ì‡ˇ ÛÔ‡‚Îˇ˛˘‡ˇ ÍÎ‡‚Ë¯‡ (Shift, Ctrl, Alt)
-                or	[ds:keybd_flags_1_], ah	; ”ÒÚ‡Ì‡‚ÎË‚‡ÂÏ ÒÓÓÚ‚ÂÚÒÚ‚Û˛˘ËÈ ÙÎ‡„
-                jmp	process_key_complete	; «‡‚Â¯‡ÂÏ Ó·‡·ÓÚÍÛ
-                
-; ---------------------------------------------------------------------------
-; Œ·‡·ÓÚÍ‡ ÔÂÂÍÎ˛˜‡ÂÏ˚ı ÍÎ‡‚Ë¯ (Caps Lock, Num Lock, Scroll Lock)
-; ---------------------------------------------------------------------------
-toggle_key:				; ...
-                ; œÓ‚ÂˇÂÏ, ÌÂ Ì‡Ê‡Ú ÎË Ctrl (ÙÎ‡„ 04h)
-                test	[byte ptr ds:keybd_flags_1_], 4
-                jnz	short process_normal_key	; ≈ÒÎË Ctrl Ì‡Ê‡Ú, Ó·‡·‡Ú˚‚‡ÂÏ Í‡Í Ó·˚˜ÌÛ˛
-                
-                ; œÓ‚ÂˇÂÏ, ÌÂ ÍÎ‡‚Ë¯‡ ÎË Insert (ÒÍ‡Ì-ÍÓ‰ 52h)
-                cmp	al, 52h
-                jnz	short check_toggle_state
-                
-                ; œÓ‚ÂˇÂÏ, ÌÂ Ì‡Ê‡Ú ÎË Alt (ÙÎ‡„ 08h)
-                test	[byte ptr ds:keybd_flags_1_], 8
-                jz	short check_toggle_state	; Alt ÌÂ Ì‡Ê‡Ú
-                jmp	process_normal_key		; Alt Ì‡Ê‡Ú - Ó·˚˜Ì‡ˇ Ó·‡·ÓÚÍ‡
-                
-; ---------------------------------------------------------------------------
-check_toggle_state:				; ...
-                ; œÓ‚ÂˇÂÏ, ÌÂ Ì‡Ê‡Ú ÎË Caps Lock (ÙÎ‡„ 20h)
-                test	[byte ptr ds:keybd_flags_1_], 20h
-                jnz	short check_shift_for_toggle
-                
-                ; œÓ‚ÂˇÂÏ, Ì‡Ê‡Ú ÎË Shift (Î˛·ÓÈ ËÁ ‰‚Ûı)
-                test	[byte ptr ds:keybd_flags_1_], 3
-                jz	short toggle_key_action
-                
-; Œ·‡·ÓÚÍ‡ ÍÓÏ·ËÌ‡ˆËË Shift + ÔÂÂÍÎ˛˜‡ÂÏ‡ˇ ÍÎ‡‚Ë¯‡
-shift_with_toggle:				; ...
-                mov	ax, 5230h		;  Ó‰ ‰Îˇ Shift + Insert
-                jmp	put_to_buffer
-                
-; ---------------------------------------------------------------------------
-check_shift_for_toggle:				; ...
-                ; Caps Lock Ì‡Ê‡Ú, ÔÓ‚ÂˇÂÏ Shift
-                test	[byte ptr ds:keybd_flags_1_], 3
-                jz	short shift_with_toggle	; Shift ÌÂ Ì‡Ê‡Ú
-                
-; ---------------------------------------------------------------------------
-toggle_key_action:				; ...
-                ; œÓ‚ÂˇÂÏ, ÌÂ ÛÒÚ‡ÌÓ‚ÎÂÌ ÎË ÛÊÂ ÙÎ‡„ ÔÂÂÍÎ˛˜‡ÂÏÓÈ ÍÎ‡‚Ë¯Ë
-                test	[ds:keybd_flags_2_], ah
-                jnz	short process_key_complete	; ”ÊÂ ÛÒÚ‡ÌÓ‚ÎÂÌ
-                
-                ; œÂÂÍÎ˛˜‡ÂÏ ÒÓÒÚÓˇÌËÂ ÍÎ‡‚Ë¯Ë
-                or	[ds:keybd_flags_2_], ah	; ”ÒÚ‡Ì‡‚ÎË‚‡ÂÏ ÙÎ‡„
-                xor	[ds:keybd_flags_1_], ah	; »Ì‚ÂÚËÛÂÏ ÙÎ‡„ ‚ ÓÒÌÓ‚ÌÓÏ ·‡ÈÚÂ
-                
-                ; ƒÎˇ ÍÎ‡‚Ë¯Ë Insert ÓÚÔ‡‚ÎˇÂÏ ÒÔÂˆË‡Î¸Ì˚È ÍÓ‰
-                cmp	al, 52h
-                jnz	short process_key_complete
-                mov	ax, 5200h		;  Ó‰ ‰Îˇ Insert
-                jmp	put_to_buffer
-                
-; ---------------------------------------------------------------------------
-; Œ·‡·ÓÚÍ‡ ÓÚÔÛÒÍ‡ÌËˇ ÍÎ‡‚Ë¯Ë
-; ---------------------------------------------------------------------------
-key_released:				; ...
-                cmp	ah, 10h			; œÓ‚ÂˇÂÏ ÚËÔ ÍÎ‡‚Ë¯Ë
-                jnb	short toggle_key_released
-                
-                ; Œ·˚˜Ì‡ˇ ÛÔ‡‚Îˇ˛˘‡ˇ ÍÎ‡‚Ë¯‡ ÓÚÔÛ˘ÂÌ‡
-                not	ah			; »Ì‚ÂÚËÛÂÏ Ï‡ÒÍÛ
-                and	[ds:keybd_flags_1_], ah	; —·‡Ò˚‚‡ÂÏ ÙÎ‡„
-                
-                ; œÓ‚ÂˇÂÏ, ÌÂ ÍÎ‡‚Ë¯‡ ÎË Alt
-                cmp	al, 0B8h		; —Í‡Ì-ÍÓ‰ ÓÚÔÛÒÍ‡ÌËˇ ÎÂ‚Ó„Ó Alt
-                jnz	short process_key_complete
-                
-                ; Œ·‡·ÓÚÍ‡ ‡Î¸ÚÂÌ‡ÚË‚ÌÓ„Ó ˜ËÒÎÓ‚Ó„Ó ‚‚Ó‰‡ (Alt-ˆËÙ˚)
-                mov	al, [ds:keybd_alt_num_]
-                mov	ah, 0
-                mov	[ds:keybd_alt_num_], ah	; —·‡Ò˚‚‡ÂÏ ÒÓı‡ÌÂÌÌÓÂ ˜ËÒÎÓ
-                cmp	al, 0			; œÓ‚ÂˇÂÏ, ·˚ÎÓ ÎË ˜ÚÓ-ÚÓ ÒÓı‡ÌÂÌÓ
-                jz	short process_key_complete
-                jmp	put_to_buffer		; œÓÏÂ˘‡ÂÏ ÒËÏ‚ÓÎ ‚ ·ÛÙÂ
-                
-; ---------------------------------------------------------------------------
-toggle_key_released:				; ...
-                ; œÂÂÍÎ˛˜‡ÂÏ‡ˇ ÍÎ‡‚Ë¯‡ ÓÚÔÛ˘ÂÌ‡
-                not	ah
-                and	[ds:keybd_flags_2_], ah	; —·‡Ò˚‚‡ÂÏ ÙÎ‡„ ‚ ·‡ÈÚÂ 2
-                jmp	short process_key_complete
-                
-; ---------------------------------------------------------------------------
-; Œ·‡·ÓÚÍ‡ Ó·˚˜ÌÓÈ ÍÎ‡‚Ë¯Ë (ÌÂ ÒÔÂˆË‡Î¸ÌÓÈ)
-; ---------------------------------------------------------------------------
-process_normal_key:				; ...
-                ; œÓ‚ÂˇÂÏ, ÌÂ ÓÚÔÛÒÍ‡ÌËÂ ÎË ˝ÚÓ (·ËÚ 7 ÛÒÚ‡ÌÓ‚ÎÂÌ)
-                cmp	al, 80h
-                jnb	short process_key_complete	; ŒÚÔÛÒÍ‡ÌËÂ - Ë„ÌÓËÛÂÏ
-                
-                ; œÓ‚ÂˇÂÏ, ÌÂ ÛÒÚ‡ÌÓ‚ÎÂÌ ÎË ÙÎ‡„ "Û‰ÂÊ‡ÌËÂ" (ÙÎ‡„ 08h ‚ ·‡ÈÚÂ 2)
-                test	[byte ptr ds:keybd_flags_2_], 8
-                jz	short check_alt		; ‘Î‡„ ÌÂ ÛÒÚ‡ÌÓ‚ÎÂÌ
-                
-                ; œÓ‚ÂˇÂÏ, ÌÂ ÍÎ‡‚Ë¯‡ ÎË NumLock (ÒÍ‡Ì-ÍÓ‰ 45h)
-                cmp	al, 45h
-                jz	short process_key_complete	; NumLock - ÔÓÔÛÒÍ‡ÂÏ
-                
-                ; —·‡Ò˚‚‡ÂÏ ÙÎ‡„ Û‰ÂÊ‡ÌËˇ
-                and	[byte ptr ds:keybd_flags_2_], 0F7h
-                
-; ---------------------------------------------------------------------------
-process_key_complete:				; ...
-                cli				; «‡ÔÂ˘‡ÂÏ ÔÂ˚‚‡ÌËˇ ÔÂÂ‰ ‚˚ıÓ‰ÓÏ
 
-; ¬ÓÒÒÚ‡ÌÓ‚ÎÂÌËÂ Â„ËÒÚÓ‚ Ë ‚ÓÁ‚‡Ú ËÁ ÔÂ˚‚‡ÌËˇ
-restore_and_exit:				; ...
-                pop	es
+scan_code_ok:
+                and	al, 7Fh			; –°–±—Ä–æ—Å–∏—Ç—å –±–∏—Ç –æ—Ç–ø—É—Å–∫–∞–Ω–∏—è (–æ—Å—Ç–∞–≤–∏—Ç—å –∫–æ–¥ –Ω–∞–∂–∞—Ç–∏—è)
+                push	cs			; CS –≤ —Å—Ç–µ–∫
+                pop	es			; ES = CS –¥–ª—è –¥–æ—Å—Ç—É–ø–∞ –∫ —Ç–∞–±–ª–∏—Ü–∞–º
                 assume es:nothing
-                pop	ds
+                mov	di, offset special_scancodes ; DI = –Ω–∞—á–∞–ª–æ —Ç–∞–±–ª–∏—Ü—ã —Å–ø–µ—Ü.—Å–∫–∞–Ω-–∫–æ–¥–æ–≤
+                mov	cx, 8			; –í —Ç–∞–±–ª–∏—Ü–µ 8 —ç–ª–µ–º–µ–Ω—Ç–æ–≤
+                repne scasb			; –ò—Å–∫–∞—Ç—å AL –≤ —Ç–∞–±–ª–∏—Ü–µ
+                mov	al, ah			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å –ø–æ–ª–Ω—ã–π —Å–∫–∞–Ω-–∫–æ–¥ (—Å –±–∏—Ç–æ–º –æ—Ç–ø—É—Å–∫–∞–Ω–∏—è)
+                jz	short handle_special_key ; –ù–∞–π–¥–µ–Ω ‚Äì –æ–±—Ä–∞–±–æ—Ç–∞—Ç—å —Å–ø–µ—Ü–∏–∞–ª—å–Ω—É—é –∫–ª–∞–≤–∏—à—É
+                jmp	regular_key_processing  ; –ù–µ –Ω–∞–π–¥–µ–Ω ‚Äì –æ–±—Ä–∞–±–æ—Ç–∞—Ç—å –∫–∞–∫ –æ–±—ã—á–Ω—É—é
+; ---------------------------------------------------------------------------
+
+handle_special_key:
+                sub	di, offset special_scancodes_end ; DI = –∏–Ω–¥–µ–∫—Å (0-7) –≤ —Ç–∞–±–ª–∏—Ü–µ –º–∞—Å–æ–∫
+                mov	ah, cs:special_key_masks[di] ; AH = –±–∏—Ç–æ–≤–∞—è –º–∞—Å–∫–∞ –∫–ª–∞–≤–∏—à–∏
+                test	al, 80h			; –ü—Ä–æ–≤–µ—Ä–∏—Ç—å –±–∏—Ç –æ—Ç–ø—É—Å–∫–∞–Ω–∏—è
+                jnz	short special_key_release ; –£—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω ‚Äì –∫–ª–∞–≤–∏—à–∞ –æ—Ç–ø—É—â–µ–Ω–∞
+                cmp	ah, 10h			; –ú–∞—Å–∫–∞ >= 10h (–∫–ª–∞–≤–∏—à–∞-–ø–µ—Ä–µ–∫–ª—é—á–∞—Ç–µ–ª—å)?
+                jnb	short handle_toggle_key ; –î–∞ ‚Äì –æ–±—Ä–∞–±–æ—Ç–∫–∞ –ø–µ—Ä–µ–∫–ª—é—á–∞—Ç–µ–ª—è
+                or	[ds:keybd_flags_1_], ah ; –ù–µ—Ç ‚Äì —É—Å—Ç–∞–Ω–æ–≤–∏—Ç—å –±–∏—Ç –º–æ–¥–∏—Ñ–∏–∫–∞—Ç–æ—Ä–∞
+                jmp	int09_exit		; –í—ã–π—Ç–∏ –∏–∑ –æ–±—Ä–∞–±–æ—Ç—á–∏–∫–∞
+; ---------------------------------------------------------------------------
+
+handle_toggle_key:
+                test	[byte ptr ds:keybd_flags_1_], 4 ; –ö–ª–∞–≤–∏–∞—Ç—É—Ä–∞ –∑–∞–±–ª–æ–∫–∏—Ä–æ–≤–∞–Ω–∞?
+                jnz	short regular_key_processing ; –î–∞ ‚Äì –∏–≥–Ω–æ—Ä–∏—Ä–æ–≤–∞—Ç—å
+                cmp	al, 52h			; –°–∫–∞–Ω-–∫–æ–¥ 52h = Insert?
+
+check_insert:
+                jnz	short set_toggle_flags	; –ù–µ Insert ‚Äì –æ–±—ã—á–Ω—ã–π –ø–µ—Ä–µ–∫–ª—é—á–∞—Ç–µ–ª—å
+                test	[byte ptr ds:keybd_flags_1_], 8 ; Insert —É–∂–µ –∞–∫—Ç–∏–≤–µ–Ω?
+                jz	short insert_not_active ; –ù–µ—Ç ‚Äì –º–æ–∂–Ω–æ –ø–µ—Ä–µ–∫–ª—é—á–∞—Ç—å
+                jmp	short regular_key_processing ; –î–∞ ‚Äì –∏–≥–Ω–æ—Ä–∏—Ä–æ–≤–∞—Ç—å
+; ---------------------------------------------------------------------------
+
+insert_not_active:
+                test	[byte ptr ds:keybd_flags_1_], 20h ; –ë–∏—Ç 5 (CapsLock/—Ä—É—Å/–ª–∞—Ç)?
+                jnz	short insert_with_shift_check ; –î–∞ ‚Äì –æ—Å–æ–±–∞—è –æ–±—Ä–∞–±–æ—Ç–∫–∞
+                test	[byte ptr ds:keybd_flags_1_], 3 ; –ü—Ä–æ–≤–µ—Ä–∏—Ç—å –Ω–∞–∂–∞—Ç–∏–µ Shift
+                jz	short set_toggle_flags	; Shift –Ω–µ –Ω–∞–∂–∞—Ç ‚Äì –ø–µ—Ä–µ–∫–ª—é—á–∏—Ç—å Insert
+
+insert_shift_pressed:
+                mov	ax, 5230h		; Insert+Shift ‚Üí –∫–æ–¥ 5230h (ASCII 0, —Å–∫–∞–Ω 30h?)
+                jmp	enqueue_check		; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+insert_with_shift_check:
+                test	[byte ptr ds:keybd_flags_1_], 3 ; –ü—Ä–æ–≤–µ—Ä–∏—Ç—å Shift –µ—â—ë —Ä–∞–∑
+                jz	short set_toggle_flags	; Shift –Ω–µ –Ω–∞–∂–∞—Ç ‚Äì –ø–µ—Ä–µ–∫–ª—é—á–∏—Ç—å Insert
+                jmp	short insert_shift_pressed ; Shift –Ω–∞–∂–∞—Ç ‚Äì –∫–æ–¥ 5230h
+; ---------------------------------------------------------------------------
+
+set_toggle_flags:
+                test	[ds:keybd_flags_2_], ah ; –§–ª–∞–≥ –¥—Ä–µ–±–µ–∑–≥–∞ —É–∂–µ —É—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω?
+                jnz	short int09_exit	; –î–∞ ‚Äì –∏–≥–Ω–æ—Ä–∏—Ä–æ–≤–∞—Ç—å –ø–æ–≤—Ç–æ—Ä
+                or	[ds:keybd_flags_2_], ah ; –£—Å—Ç–∞–Ω–æ–≤–∏—Ç—å —Ñ–ª–∞–≥ –æ–±—Ä–∞–±–æ—Ç–∫–∏
+                xor	[ds:keybd_flags_1_], ah ; –ü–µ—Ä–µ–∫–ª—é—á–∏—Ç—å —Å–æ—Å—Ç–æ—è–Ω–∏–µ –∫–ª–∞–≤–∏—à–∏
+                cmp	al, 52h			; Insert?
+                jnz	short int09_exit	; –ù–µ—Ç ‚Äì –≤—ã—Ö–æ–¥
+                mov	ax, 5200h		; Insert –±–µ–∑ Shift ‚Üí –∫–æ–¥ 5200h
+                jmp	enqueue_check		; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+special_key_release:
+                cmp	ah, 10h			; –ö–ª–∞–≤–∏—à–∞-–ø–µ—Ä–µ–∫–ª—é—á–∞—Ç–µ–ª—å?
+                jnb	short release_toggle_key ; –î–∞ ‚Äì —Å–±—Ä–æ—Å–∏—Ç—å —Ñ–ª–∞–≥ –¥—Ä–µ–±–µ–∑–≥–∞
+                not	ah			; –ò–Ω–≤–µ—Ä—Ç–∏—Ä–æ–≤–∞—Ç—å –º–∞—Å–∫—É
+                and	[ds:keybd_flags_1_], ah ; –°–±—Ä–æ—Å–∏—Ç—å –±–∏—Ç –º–æ–¥–∏—Ñ–∏–∫–∞—Ç–æ—Ä–∞
+                cmp	al, 0B8h		; –ö–æ–¥ –æ—Ç–ø—É—Å–∫–∞–Ω–∏—è –ª–µ–≤–æ–≥–æ Alt (B8h)?
+                jnz	short int09_exit	; –ù–µ—Ç ‚Äì –≤—ã—Ö–æ–¥
+                mov	al, [ds:keybd_alt_num_] ; –ü—Ä–æ—á–∏—Ç–∞—Ç—å —Å—á—ë—Ç—á–∏–∫ Alt-—Ü–∏—Ñ—Ä
+                mov	ah, 0			; –û–±–Ω—É–ª–∏—Ç—å AH
+                mov	[ds:keybd_alt_num_], ah ; –°–±—Ä–æ—Å–∏—Ç—å —Å—á—ë—Ç—á–∏–∫
+                cmp	al, 0			; –ë—ã–ª–æ –Ω–∞–±—Ä–∞–Ω–æ —á–∏—Å–ª–æ?
+                jz	short int09_exit	; –ù–µ—Ç ‚Äì –≤—ã—Ö–æ–¥
+                jmp	caps_check		; –î–∞ ‚Äì –ø–æ–º–µ—Å—Ç–∏—Ç—å —Å–∏–º–≤–æ–ª –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+release_toggle_key:
+                not	ah			; –ò–Ω–≤–µ—Ä—Ç–∏—Ä–æ–≤–∞—Ç—å –º–∞—Å–∫—É
+                and	[ds:keybd_flags_2_], ah ; –°–±—Ä–æ—Å–∏—Ç—å —Ñ–ª–∞–≥ –¥—Ä–µ–±–µ–∑–≥–∞ –ø–µ—Ä–µ–∫–ª—é—á–∞—Ç–µ–ª—è
+                jmp	short int09_exit	; –í—ã–π—Ç–∏
+; ---------------------------------------------------------------------------
+
+regular_key_processing:
+                cmp	al, 80h			; –ö–æ–¥ –æ—Ç–ø—É—Å–∫–∞–Ω–∏—è (‚â•80h)?
+                jnb	short int09_exit	; –î–∞ ‚Äì –∏–≥–Ω–æ—Ä–∏—Ä–æ–≤–∞—Ç—å –æ—Ç–ø—É—Å–∫–∞–Ω–∏–µ
+                test	[byte ptr ds:keybd_flags_2_], 8 ; –§–ª–∞–≥ Pause/Break?
+                jz	short check_keyboard_lock ; –ù–µ—Ç ‚Äì –ø—Ä–æ–≤–µ—Ä–∏—Ç—å –±–ª–æ–∫–∏—Ä–æ–≤–∫—É
+                cmp	al, 45h			; Num Lock?
+                jz	short int09_exit	; –î–∞ ‚Äì –∏–≥–Ω–æ—Ä–∏—Ä–æ–≤–∞—Ç—å –ø—Ä–∏ Pause
+                and	[byte ptr ds:keybd_flags_2_], 0F7h ; –°–±—Ä–æ—Å–∏—Ç—å —Ñ–ª–∞–≥ Pause
+
+int09_exit:
+                cli				; –ó–∞–ø—Ä–µ—Ç–∏—Ç—å –ø—Ä–µ—Ä—ã–≤–∞–Ω–∏—è
+
+int09_exit_without_sti:
+                pop	es			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å ES
+                assume es:nothing
+                pop	ds			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å DS
                 assume ds:nothing
-                pop	di
-                pop	si
-                pop	dx
-                pop	cx
-                pop	bx
-                pop	ax
-                iret
+                pop	di			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å DI
+                pop	si			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å SI
+                pop	dx			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å DX
+                pop	cx			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å CX
+                pop	bx			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å BX
+                pop	ax			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å AX
+                iret				; –í–æ–∑–≤—Ä–∞—Ç –∏–∑ –ø—Ä–µ—Ä—ã–≤–∞–Ω–∏—è
 
 endp		int_09h
 ; ---------------------------------------------------------------------------
-; œÓ‚ÂÍ‡ ÒÓÒÚÓˇÌËˇ ÍÎ‡‚Ë¯Ë Alt
 ; ---------------------------------------------------------------------------
-check_alt:				; ...
-                test	[byte ptr ds:keybd_flags_1_], 8	; œÓ‚ÂˇÂÏ Alt
-                jnz	short alt_pressed		; Alt Ì‡Ê‡Ú
-                jmp	no_alt_pressed			; Alt ÌÂ Ì‡Ê‡Ú
-                
-; ---------------------------------------------------------------------------
-; Œ·‡·ÓÚÍ‡ ÔË Ì‡Ê‡ÚÓÏ Alt
-; ---------------------------------------------------------------------------
-alt_pressed:				; ...
-                ; œÓ‚ÂˇÂÏ, ÌÂ Ì‡Ê‡Ú ÎË Ctrl
-                test	[byte ptr ds:keybd_flags_1_], 4
-                jz	short other_ctrl_alt_combo
-                
-                ; Ctrl+Alt Ì‡Ê‡Ú˚ - ÔÓ‚ÂˇÂÏ ‰ÓÔÓÎÌËÚÂÎ¸Ì˚Â ÍÓÏ·ËÌ‡ˆËË
-                cmp	al, 53h		; —Í‡Ì-ÍÓ‰ ÍÎ‡‚Ë¯Ë Del
-                jnz	short other_ctrl_alt_combo
-                
-                ; Ctrl+Alt+Del - ÚÂÔÎ˚È ÔÂÂÁ‡ÔÛÒÍ
-                mov	[word ptr ds:warm_boot_flag_], 1234h
-                jmp	warm_boot	; œÂÂıÓ‰ Í ÔÂÂÁ‡„ÛÁÍÂ
-                
-; ---------------------------------------------------------------------------
-; “‡·ÎËˆ‡ ÒÍ‡Ì-ÍÓ‰Ó‚ ‰Îˇ ‡Î¸ÚÂÌ‡ÚË‚ÌÓ„Ó ˜ËÒÎÓ‚Ó„Ó ‚‚Ó‰‡ (Alt+ˆËÙ˚)
-; ---------------------------------------------------------------------------
-alt_numpad_table	db  52h	; R - Insert?		; ...
-			db  4Fh	; O
-			db  50h	; P
-			db  51h	; Q
-			db  4Bh	; K
-			db  4Ch	; L
-			db  4Dh	; M
-			db  47h	; G
-			db  48h	; H
-			db  49h	; I
-			db  10h
-			db  11h
-			db  12h
-			db  13h
-			db  14h
-			db  15h
-			db  16h
-			db  17h
-			db  18h
-			db  19h
-			db  1Eh
-			db  1Fh
-			db  20h
-			db  21h	; !
-			db  22h	; "
-			db  23h	; #
-			db  24h	; $
-			db  25h	; %
-			db  26h	; &
-			db  2Ch	; ,
-			db  2Dh	; -
-			db  2Eh	; .
-			db  2Fh	; /
-			db  30h	; 0
-			db  31h	; 1
-			db  32h	; 2
-; ---------------------------------------------------------------------------
-other_ctrl_alt_combo:
-		cmp	al,39h   ; '9' - ÔÓ‚ÂÍ‡ Ì‡ ˆËÙÛ 9
-		jne	check_alt_numpad ; ≈ÒÎË ÌÂ 9, ÔÓ‚ÂˇÂÏ ‰Û„ËÂ ˆËÙ˚
-                mov	al, 20h	; œÓ·ÂÎ ‰Îˇ Ctrl+Alt+9?
-                jmp	put_to_buffer
-; ---------------------------------------------------------------------------
-check_alt_numpad:
-                ; »˘ÂÏ ÒÍ‡Ì-ÍÓ‰ ‚ Ú‡·ÎËˆÂ ˆËÙÓ‚Ó„Ó ·ÎÓÍ‡ ÔË Alt
-                mov	di, offset alt_numpad_table
-                mov	cx, 0Ah		; ƒÎËÌ‡ Ú‡·ÎËˆ˚ - 10 ˝ÎÂÏÂÌÚÓ‚
-                repne scasb		; »˘ÂÏ ÒÍ‡Ì-ÍÓ‰
-                jnz	short check_alt_function_keys	; ÕÂ Ì‡¯ÎË
-                
-                ; Õ‡¯ÎË - Ó·‡·‡Ú˚‚‡ÂÏ Alt+ˆËÙ‡ (Ì‡ÍÓÔÎÂÌËÂ ÍÓ‰‡)
-                sub	di, offset alt_numpad_table + 1
-                mov	al, [ds:keybd_alt_num_]
-                mov	ah, 0Ah		; ”ÏÌÓÊ‡ÂÏ Ì‡ 10 (‰ÂÒˇÚË˜Ì‡ˇ ÒËÒÚÂÏ‡)
-                mul	ah
-                add	ax, di		; ƒÓ·‡‚ÎˇÂÏ ÌÓ‚Û˛ ˆËÙÛ
-                mov	[ds:keybd_alt_num_], al	; —Óı‡ÌˇÂÏ Ì‡ÍÓÔÎÂÌÌÓÂ ÁÌ‡˜ÂÌËÂ
-                jmp	short process_key_complete
-                
-; ---------------------------------------------------------------------------
-check_alt_function_keys:				; ...
-                ; —·‡Ò˚‚‡ÂÏ Ì‡ÍÓÔÎÂÌÌÓÂ ÁÌ‡˜ÂÌËÂ Alt-ˆËÙ
-                mov	[byte ptr ds:keybd_alt_num_], 0
-                
-                ; œÓ‚ÂˇÂÏ ÙÛÌÍˆËÓÌ‡Î¸Ì˚Â ÍÎ‡‚Ë¯Ë ÔË Alt
-                mov	cx, 1Ah		; ƒÎËÌ‡ Ú‡·ÎËˆ˚ ÙÛÌÍˆËÓÌ‡Î¸Ì˚ı ÍÎ‡‚Ë¯
-                repne scasb		; »˘ÂÏ ÒÍ‡Ì-ÍÓ‰
-                jnz	short check_extended_codes
-                
-                ; Õ‡¯ÎË ÙÛÌÍˆËÓÌ‡Î¸ÌÛ˛ ÍÎ‡‚Ë¯Û Ò Alt
-                mov	al, 0		; ¡‡ÁÓ‚˚È ÍÓ‰ ‰Îˇ Alt+F1..F10
-                jmp	put_to_buffer
-                
-; ---------------------------------------------------------------------------
-check_extended_codes:				; ...
-                ; œÓ‚ÂˇÂÏ ‡Ò¯ËÂÌÌ˚Â ÍÓ‰˚
-                cmp	al, 2		; ÕËÊÌˇˇ „‡ÌËˆ‡
-                jb	short check_function_keys_range
-                cmp	al, 0Eh		; ¬ÂıÌˇˇ „‡ÌËˆ‡
-                jnb	short check_function_keys_range
-                
-                ; –‡Ò¯ËÂÌÌ˚È ÍÓ‰ Ì‡È‰ÂÌ
-                add	ah, 76h		; —ÏÂ˘ÂÌËÂ ‰Îˇ ‡Ò¯ËÂÌÌ˚ı ÍÓ‰Ó‚
-                mov	al, 0
-                jmp	put_to_buffer
-                
-; ---------------------------------------------------------------------------
-check_function_keys_range:				; ...
-                ; œÓ‚ÂˇÂÏ ‰Ë‡Ô‡ÁÓÌ ÙÛÌÍˆËÓÌ‡Î¸Ì˚ı ÍÎ‡‚Ë¯ F1..F10
-                cmp	al, 3Bh		; F1
-                jnb	short check_is_function_key
 
-skip_key:				; ...
-                jmp	process_key_complete	; œÓÔÛÒÍ‡ÂÏ ˝ÚÛ ÍÎ‡‚Ë¯Û
-                
+check_keyboard_lock:
+                test	[byte ptr ds:keybd_flags_1_], 8 ; –ü—Ä–æ–≤–µ—Ä–∏—Ç—å –±–∏—Ç –±–ª–æ–∫–∏—Ä–æ–≤–∫–∏ –∫–ª–∞–≤–∏–∞—Ç—É—Ä—ã
+                jnz	short keyboard_locked	; –£—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω ‚Äì –∫–ª–∞–≤–∏–∞—Ç—É—Ä–∞ –∑–∞–±–ª–æ–∫–∏—Ä–æ–≤–∞–Ω–∞
+                jmp	keyboard_unlocked	; –°–±—Ä–æ—à–µ–Ω ‚Äì –∫–ª–∞–≤–∏–∞—Ç—É—Ä–∞ —Ä–∞–∑–±–ª–æ–∫–∏—Ä–æ–≤–∞–Ω–∞
 ; ---------------------------------------------------------------------------
-check_is_function_key:				; ...
-                cmp	al, 47h		; œÓ‚ÂˇÂÏ ‚ÂıÌ˛˛ „‡ÌËˆÛ
-                jnb	short skip_key	; ≈ÒÎË >= 47h, ˝ÚÓ ÌÂ F1..F10
-                
-                ; ›ÚÓ ÙÛÌÍˆËÓÌ‡Î¸Ì‡ˇ ÍÎ‡‚Ë¯‡ F1..F10
-                mov	bx, offset alt_function_keys_table
-                jmp	convert_and_store
-                
-; ---------------------------------------------------------------------------
-; Œ·‡·ÓÚÍ‡ ÔË ÌÂÌ‡Ê‡ÚÓÏ Alt
-; ---------------------------------------------------------------------------
-no_alt_pressed:				; ...
-                ; œÓ‚ÂˇÂÏ, Ì‡Ê‡Ú ÎË Ctrl
-                test	[byte ptr ds:keybd_flags_1_], 4
-                jz	short check_ctrl_combinations
-                
-                ; Ctrl Ì‡Ê‡Ú
-                cmp	al, 46h		; —Í‡Ì-ÍÓ‰ Scroll Lock
-                jnz	short check_ctrl_scroll
-                
-                ; Ctrl+Scroll Lock = Break
-                mov	bx, 1Eh		; —·‡Ò˚‚‡ÂÏ ÛÍ‡Á‡ÚÂÎË ·ÛÙÂ‡ ÍÎ‡‚Ë‡ÚÛ˚
-                mov	[ds:keybd_q_head_], bx
-                mov	[ds:keybd_q_tail_], bx
-                mov	[byte ptr ds:keybd_break_], 80h	; ”ÒÚ‡Ì‡‚ÎË‚‡ÂÏ ÙÎ‡„ Break
-                int	1Bh		; ¬˚Á˚‚‡ÂÏ Ó·‡·ÓÚ˜ËÍ Ctrl-Break
-                mov	ax, 0		; œÛÒÚÓÈ ÍÓ‰
-                jmp	put_to_buffer
-                
-; ---------------------------------------------------------------------------
-check_ctrl_scroll:				; ...
-                ; œÓ‚ÂˇÂÏ Ctrl+NumLock (ÔËÓÒÚ‡ÌÓ‚Í‡)
-                cmp	al, 45h		; NumLock
-                jnz	short check_ctrl_print
-                
-                ; Ctrl+NumLock - ÔËÓÒÚ‡ÌÓ‚Í‡ ÒËÒÚÂÏ˚
-                or	[byte ptr ds:keybd_flags_2_], 8	; ”ÒÚ‡Ì‡‚ÎË‚‡ÂÏ ÙÎ‡„ Ô‡ÛÁ˚
-                mov	al, 20h
-                out	20h, al		; œÓÒ˚Î‡ÂÏ EOI ÍÓÌÚÓÎÎÂÛ ÔÂ˚‚‡ÌËÈ
-                
-                ; œÓ‚ÂˇÂÏ ‚Ë‰ÂÓ ÂÊËÏ (‚ÓÁÏÓÊÌÓ, ‰Îˇ ÓÚÍÎ˛˜ÂÌËˇ ‚Ë‰ÂÓ)
-                cmp	[byte ptr ds:video_mode_], 7
-                jz	short pause_loop
-                
-                ; ƒÎˇ ˆ‚ÂÚÌÓ„Ó ‚Ë‰ÂÓ - ‰ÓÔÓÎÌËÚÂÎ¸Ì˚Â ‰ÂÈÒÚ‚Ëˇ
-                mov	dx, 3D8h	; œÓÚ ÛÔ‡‚ÎÂÌËˇ ‚Ë‰ÂÓ‡‰‡ÔÚÂÓÏ CGA
-                mov	al, [ds:video_mode_reg_]
-                out	dx, al
-                
-pause_loop:				; ...
-                ; ÷ËÍÎ ÓÊË‰‡ÌËˇ ÒÌˇÚËˇ Ô‡ÛÁ˚
-                test	[byte ptr ds:keybd_flags_2_], 8
-                jnz	short pause_loop
-                jmp	restore_and_exit
-                
-; ---------------------------------------------------------------------------
-check_ctrl_print:				; ...
-                ; œÓ‚ÂˇÂÏ Ctrl+PrtSc (ÔÂ˜‡Ú¸ ˝Í‡Ì‡)
-                cmp	al, 37h		; PrtSc
-                jnz	short check_ctrl_other
-                
-                ; Ctrl+PrtSc
-                mov	ax, 7200h	; —ÔÂˆË‡Î¸Ì˚È ÍÓ‰
-                jmp	put_to_buffer
-                
-; ---------------------------------------------------------------------------
-check_ctrl_other:				; ...
-                ; œÓ‚ÂˇÂÏ ‰Û„ËÂ ÍÓÏ·ËÌ‡ˆËË Ò Ctrl
-                mov	bx, offset ctrl_keys_table
-                cmp	al, 3Bh		; F1
-                jnb	short check_ctrl_function_keys
-                jmp	convert_scan_code
-                
-; ---------------------------------------------------------------------------
-check_ctrl_function_keys:				; ...
-                ; Ctrl+ÙÛÌÍˆËÓÌ‡Î¸Ì˚Â ÍÎ‡‚Ë¯Ë
-                mov	bx, offset ctrl_function_keys_table
-                jmp	convert_and_store
-                
-; ---------------------------------------------------------------------------
-check_ctrl_combinations:				; ...
-                ; œÓ‚ÂˇÂÏ Ó·˚˜Ì˚Â ÍÎ‡‚Ë¯Ë Ò Ctrl
-                cmp	al, 47h		; œÓ‚ÂˇÂÏ Home (Ì‡˜‡ÎÓ ˆËÙÓ‚Ó„Ó ·ÎÓÍ‡)
-                jnb	short numeric_keypad
-                
-                ; œÓ‚ÂˇÂÏ, Ì‡Ê‡Ú ÎË Shift
-                test	[byte ptr ds:keybd_flags_1_], 3
-                jz	short check_normal_function_keys
-                
-                ; Shift Ì‡Ê‡Ú
-                cmp	al, 0Fh		; Tab
-                jnz	short check_shift_tab
-                
-                ; Shift+Tab
-                mov	ax, 0F00h
-                jmp	put_to_buffer
-                
-; ---------------------------------------------------------------------------
-check_shift_tab:				; ...
-                cmp	al, 37h		; PrtSc
-                jnz	short check_shift_function_keys
-                
-                ; Shift+PrtSc - ‚˚ÁÓ‚ Ó·‡·ÓÚ˜ËÍ‡ ÔÂ˜‡ÚË ˝Í‡Ì‡
-                mov	al, 20h
-                out	20h, al		; EOI
-                int	5		; ¬˚ÁÓ‚ Ó·‡·ÓÚ˜ËÍ‡ ÔÂ˜‡ÚË ˝Í‡Ì‡
-                jmp	restore_and_exit
-                
-; ---------------------------------------------------------------------------
-check_shift_function_keys:				; ...
-                cmp	al, 3Bh		; F1
-                jb	short shift_normal_key
-                
-                ; Shift+ÙÛÌÍˆËÓÌ‡Î¸Ì˚Â ÍÎ‡‚Ë¯Ë
-                mov	bx, offset shift_function_keys_table
-                jmp	convert_and_store
-                
-; ---------------------------------------------------------------------------
-shift_normal_key:				; ...
-                ; Œ·˚˜Ì˚Â ÍÎ‡‚Ë¯Ë Ò Shift
-                mov	bx, offset shift_keys_table
-                jmp	short convert_scan_code
-                
-; ---------------------------------------------------------------------------
-numeric_keypad:				; ...
-                ; Œ·‡·ÓÚÍ‡ ˆËÙÓ‚Ó„Ó ·ÎÓÍ‡ ÍÎ‡‚Ë‡ÚÛ˚
-                test	[byte ptr ds:keybd_flags_1_], 20h	; Caps Lock
-                jnz	short caps_lock_numeric
-                
-                ; œÓ‚ÂˇÂÏ Shift ‰Îˇ ˆËÙÓ‚Ó„Ó ·ÎÓÍ‡
-                test	[byte ptr ds:keybd_flags_1_], 3
-                jnz	short shift_numeric
-                
-; Œ·‡·ÓÚÍ‡ ˆËÙÓ‚Ó„Ó ·ÎÓÍ‡ ·ÂÁ Shift
-normal_numeric:				; ...
-                cmp	al, 4Ah		; ÃËÌÛÒ Ì‡ ˆËÙÓ‚ÓÏ ·ÎÓÍÂ
-                jz	short numpad_minus
-                cmp	al, 4Eh		; œÎ˛Ò Ì‡ ˆËÙÓ‚ÓÏ ·ÎÓÍÂ
-                jz	short numpad_plus
-                
-                ; Œ·˚˜Ì˚Â ˆËÙ˚ Ì‡ ˆËÙÓ‚ÓÏ ·ÎÓÍÂ
-                sub	al, 47h		; œÂÓ·‡ÁÛÂÏ ÒÍ‡Ì-ÍÓ‰ ‚ ËÌ‰ÂÍÒ (0-9)
-                mov	bx, offset numpad_normal_table
-                jmp	convert_and_store
-                
-numpad_minus:				; ...
-                mov	ax, 4A2Dh	;  Ó‰ ‰Îˇ ÏËÌÛÒ‡
-                jmp	short put_to_buffer
-                
-numpad_plus:				; ...
-                mov	ax, 4E2Bh	;  Ó‰ ‰Îˇ ÔÎ˛Ò‡
-                jmp	short put_to_buffer
-                
-; ---------------------------------------------------------------------------
-caps_lock_numeric:				; ...
-                ; Caps Lock ‚ÍÎ˛˜ÂÌ - ÔÓ‚ÂˇÂÏ Shift
-                test	[byte ptr ds:keybd_flags_1_], 3
-                jnz	short normal_numeric	; Shift Ì‡Ê‡Ú - Í‡Í Ó·˚˜ÌÓ
-                
-; ---------------------------------------------------------------------------
-shift_numeric:				; ...
-                ; Shift Ì‡Ê‡Ú Ì‡ ˆËÙÓ‚ÓÏ ·ÎÓÍÂ
-                sub	al, 46h		; œÂÓ·‡ÁÛÂÏ ÒÍ‡Ì-ÍÓ‰
-                mov	bx, offset numpad_shift_table
-                jmp	short convert_scan_code
-                
-; ---------------------------------------------------------------------------
-check_normal_function_keys:				; ...
-                ; Œ·˚˜Ì˚Â ÍÎ‡‚Ë¯Ë ·ÂÁ ÛÔ‡‚Îˇ˛˘Ëı
-                cmp	al, 3Bh		; F1
-                jb	short normal_key_processing
-                
-                ; ‘ÛÌÍˆËÓÌ‡Î¸Ì˚Â ÍÎ‡‚Ë¯Ë ·ÂÁ ÏÓ‰ËÙËÍ‡ÚÓÓ‚
-                mov	al, 0		; ¡‡ÁÓ‚˚È ÍÓ‰ ‰Îˇ F1..F10
-                jmp	short put_to_buffer
-                
-; ---------------------------------------------------------------------------
-normal_key_processing:				; ...
-                ; Œ·˚˜Ì˚Â ‡ÎÙ‡‚ËÚÌÓ-ˆËÙÓ‚˚Â ÍÎ‡‚Ë¯Ë
-                mov	bx, offset normal_keys_table
-                
-; ---------------------------------------------------------------------------
-convert_scan_code:				; ...
-                ; œÂÓ·‡ÁÓ‚‡ÌËÂ ÒÍ‡Ì-ÍÓ‰‡ ‚ ASCII
-                dec	al		; »Ì‰ÂÍÒ˚ ‚ Ú‡·ÎËˆÂ Ì‡˜ËÌ‡˛ÚÒˇ Ò 0
-                xlat	[byte ptr cs:bx]	; œÂÓ·‡ÁÛÂÏ ˜ÂÂÁ Ú‡·ÎËˆÛ
-                
-; ---------------------------------------------------------------------------
-put_to_buffer:				; ...
-                ; œÓ‚ÂˇÂÏ, ÌÂ ÔÛÒÚÓÈ ÎË ÍÓ‰ (FFh)
-                cmp	al, 0FFh
-                jz	skip_key	; œÛÒÚÓÈ ÍÓ‰ - ÔÓÔÛÒÍ‡ÂÏ
-                cmp	ah, 0FFh
-                jz	skip_key
-                
-; ---------------------------------------------------------------------------
-store_char:				; ...
-                ; œÓ‚ÂˇÂÏ ÒÓÒÚÓˇÌËÂ Caps Lock
-                test	[byte ptr ds:keybd_flags_1_], 40h	; Caps Lock
-                jz	short check_shift_for_case
-                
-                ; Caps Lock ‚ÍÎ˛˜ÂÌ - ÔÓ‚ÂˇÂÏ Shift ‰Îˇ ÓÔÂ‰ÂÎÂÌËˇ Â„ËÒÚ‡
-                test	[byte ptr ds:keybd_flags_1_], 3
-                jz	short caps_lock_no_shift
-                
-                ; Caps Lock + Shift = ÒÚÓ˜Ì˚Â ·ÛÍ‚˚
-                cmp	al, 41h		; 'A'
-                jb	short add_to_buffer
-                cmp	al, 5Ah		; 'Z'
-                ja	short add_to_buffer
-                add	al, 20h		; œÂÓ·‡ÁÛÂÏ ‚ ÒÚÓ˜Ì˚Â
-                jmp	short add_to_buffer
-                
-; ---------------------------------------------------------------------------
-caps_lock_no_shift:				; ...
-                ; “ÓÎ¸ÍÓ Caps Lock (·ÂÁ Shift)
-                cmp	al, 61h		; 'a'
-                jb	short add_to_buffer
-                cmp	al, 7Ah		; 'z'
-                ja	short add_to_buffer
-                sub	al, 20h		; œÂÓ·‡ÁÛÂÏ ‚ Á‡„Î‡‚Ì˚Â
-                jmp	short add_to_buffer
-                
-; ---------------------------------------------------------------------------
-check_shift_for_case:				; ...
-                ; Caps Lock ‚˚ÍÎ˛˜ÂÌ - ÔÓ‚ÂˇÂÏ Shift
-                test	[byte ptr ds:keybd_flags_1_], 3
-                jz	short add_to_buffer	; Shift ÌÂ Ì‡Ê‡Ú - ÓÒÚ‡‚ÎˇÂÏ Í‡Í ÂÒÚ¸
-                
-                ; Shift Ì‡Ê‡Ú - ÏÂÌˇÂÏ Â„ËÒÚ
-                cmp	al, 61h		; 'a'
-                jb	short add_to_buffer
-                cmp	al, 7Ah		; 'z'
-                ja	short add_to_buffer
-                sub	al, 20h		; œÂÓ·‡ÁÛÂÏ ‚ Á‡„Î‡‚Ì˚Â
-                
-; ---------------------------------------------------------------------------
-add_to_buffer:				; ...
-                ; œÓÏÂ˘‡ÂÏ ÒËÏ‚ÓÎ ‚ ·ÛÙÂ ÍÎ‡‚Ë‡ÚÛ˚
-                mov	bx, [ds:keybd_q_tail_]	; œÓÎÛ˜‡ÂÏ ÛÍ‡Á‡ÚÂÎ¸ ı‚ÓÒÚ‡
-                mov	si, bx
-                call	advance_buffer_pointer	; œÂÂıÓ‰ËÏ Í ÒÎÂ‰Û˛˘ÂÈ ÔÓÁËˆËË
-                
-                ; œÓ‚ÂˇÂÏ, ÌÂ ÔÂÂÔÓÎÌÂÌ ÎË ·ÛÙÂ
-                cmp	bx, [ds:keybd_q_head_]
-                jz	short buffer_full	; ¡ÛÙÂ ÔÓÎÓÌ
-                
-                ; —Óı‡ÌˇÂÏ ÒËÏ‚ÓÎ ‚ ·ÛÙÂ
-                mov	[si], ax
-                mov	[ds:keybd_q_tail_], bx	; Œ·ÌÓ‚ÎˇÂÏ ÛÍ‡Á‡ÚÂÎ¸ ı‚ÓÒÚ‡
-                jmp	process_key_complete
-                
-; ---------------------------------------------------------------------------
-buffer_full:				; ...
-                ; ¡ÛÙÂ ÍÎ‡‚Ë‡ÚÛ˚ ÔÂÂÔÓÎÌÂÌ - Á‚ÛÍÓ‚ÓÈ ÒË„Ì‡Î
-                call	sound_beep
-                jmp	process_key_complete
-                
-; ---------------------------------------------------------------------------
-convert_and_store:				; ...
-                ; œÂÓ·‡ÁÓ‚‡ÌËÂ ÙÛÌÍˆËÓÌ‡Î¸Ì˚ı ÍÎ‡‚Ë¯
-                sub	al, 3Bh		; Õ‡˜ËÌ‡ÂÏ Ò F1
-                
-convert_from_table:				; ...
-                xlat	[byte ptr cs:bx]	; œÂÓ·‡ÁÛÂÏ ˜ÂÂÁ Ú‡·ÎËˆÛ
-                mov	ah, al		; —Óı‡ÌˇÂÏ ‚ AH (ÒÍ‡Ì-ÍÓ‰)
-                mov	al, 0		; AL=0 ‰Îˇ ÙÛÌÍˆËÓÌ‡Î¸Ì˚ı ÍÎ‡‚Ë¯
-                jmp	put_to_buffer
-                
-; ---------------------------------------------------------------------------
-; œÓˆÂ‰Û‡ Á‚ÛÍÓ‚Ó„Ó ÒË„Ì‡Î‡ (ÔË˘‡ÎÍ‡) ÔË ÔÂÂÔÓÎÌÂÌËË ·ÛÙÂ‡
-; ---------------------------------------------------------------------------
-sound_beep:				; ...
-                push	ax
-                push	bx
-                push	cx
-                mov	bx, 0C0h	; ƒÎËÚÂÎ¸ÌÓÒÚ¸ Á‚ÛÍ‡
-                
-                ; ◊ËÚ‡ÂÏ ÚÂÍÛ˘ÂÂ ÒÓÒÚÓˇÌËÂ ÔÓÚ‡ B
-                in	al, 61h		; œÓÚ B ÍÓÌÚÓÎÎÂ‡ 8255
-                push	ax		; —Óı‡ÌˇÂÏ
-                
-beep_loop:				; ...
-                ; ¬˚ÍÎ˛˜‡ÂÏ ‰ËÌ‡ÏËÍ (Ò·‡Ò˚‚‡ÂÏ ·ËÚ˚ 0 Ë 1)
-                and	al, 0FCh
-                out	61h, al
-                
-                ; œ‡ÛÁ‡
-                mov	cx, 48h
-delay_off:				; ...
-                loop	delay_off
-                
-                ; ¬ÍÎ˛˜‡ÂÏ ‰ËÌ‡ÏËÍ (ÛÒÚ‡Ì‡‚ÎË‚‡ÂÏ ·ËÚ 1)
-                or	al, 2
-                out	61h, al
-                
-                ; œ‡ÛÁ‡
-                mov	cx, 48h
-delay_on:				; ...
-                loop	delay_on
-                
-                ; ”ÏÂÌ¸¯‡ÂÏ Ò˜ÂÚ˜ËÍ Ë ÔÓ‚ÚÓˇÂÏ
-                dec	bx
-                jnz	short beep_loop
-                
-                ; ¬ÓÒÒÚ‡Ì‡‚ÎË‚‡ÂÏ ËÒıÓ‰ÌÓÂ ÒÓÒÚÓˇÌËÂ ÔÓÚ‡
-                pop	ax
-                out	61h, al
-                
-                pop	cx
-                pop	bx
-                pop	ax
-                retn
-                
-; ---------------------------------------------------------------------------
-; œÓˆÂ‰Û‡ ÔÓ‰‚ËÊÂÌËˇ ÛÍ‡Á‡ÚÂÎˇ ·ÛÙÂ‡ ÍÎ‡‚Ë‡ÚÛ˚
-; ---------------------------------------------------------------------------
-advance_buffer_pointer:				; ...
-                ; BX - ÚÂÍÛ˘ËÈ ÛÍ‡Á‡ÚÂÎ¸, Ì‡ ‚˚ıÓ‰Â - ÌÓ‚˚È ÛÍ‡Á‡ÚÂÎ¸ ‚ BX
-                ; SI ÓÒÚ‡ÂÚÒˇ ËÒıÓ‰Ì˚Ï ÛÍ‡Á‡ÚÂÎÂÏ
-                add	bx, 2		;  ‡Ê‰˚È ˝ÎÂÏÂÌÚ - ÒÎÓ‚Ó
-                cmp	bx, offset keybd_buffer_end
-                jb	short pointer_ok
-                mov	bx, offset keybd_buffer_	; ÷ËÍÎË˜ÂÒÍËÈ ·ÛÙÂ
-pointer_ok:
-                retn
 
+keyboard_locked:
+                test	[byte ptr ds:keybd_flags_1_], 4 ; Scroll Lock –∞–∫—Ç–∏–≤–µ–Ω?
+                jz	short locked_space_check ; –ù–µ—Ç ‚Äì –æ–±—ã—á–Ω–∞—è –±–ª–æ–∫–∏—Ä–æ–≤–∫–∞
+                cmp	al, 53h			; –°–∫–∞–Ω-–∫–æ–¥ 53h = Del?
+                jnz	short locked_space_check ; –ù–µ—Ç ‚Äì –Ω–µ –ø–µ—Ä–µ–∑–∞–≥—Ä—É–∑–∫–∞
+                mov	[word ptr ds:warm_boot_flag_], 1234h ; –£—Å—Ç–∞–Ω–æ–≤–∏—Ç—å —Ñ–ª–∞–≥ —Ç–µ–ø–ª–æ–π –ø–µ—Ä–µ–∑–∞–≥—Ä—É–∑–∫–∏
+                jmp	warm_boot		; –ü–µ—Ä–µ–∑–∞–≥—Ä—É–∑–∏—Ç—å —Å–∏—Å—Ç–µ–º—É
 ; ---------------------------------------------------------------------------
-; Œ·‡·ÓÚÍ‡ Ó¯Ë·ÍË ÍÎ‡‚Ë‡ÚÛ˚
+alt_digit_table	db  52h	; R			; –¢–∞–±–ª–∏—Ü–∞ —Å–∫–∞–Ω-–∫–æ–¥–æ–≤ Alt-—Ü–∏—Ñ—Ä (–Ω–∞—á–∏–Ω–∞–µ—Ç—Å—è —Å 52h)
+alt_digit_offset db  4Fh	; O			; –°–º–µ—â–µ–Ω–∏–µ –¥–ª—è –≤—ã—á–∏—Å–ª–µ–Ω–∏—è —Ü–∏—Ñ—Ä—ã (–∏—Å–ø–æ–ª—å–∑—É–µ—Ç—Å—è –≤ sub di,offset)
+                db  50h	; P
+                db  51h	; Q
+                db  4Bh	; K
+                db  4Ch	; L
+                db  4Dh	; M
+                db  47h	; G
+                db  48h	; H
+                db  49h	; I
+                db  10h
+                db  11h
+                db  12h
+                db  13h
+                db  14h
+                db  15h
+                db  16h
+                db  17h
+                db  18h
+                db  19h
+                db  1Eh
+                db  1Fh
+                db  20h
+                db  21h	; !
+                db  22h	; "
+                db  23h	; #
+                db  24h	; $
+                db  25h	; %
+                db  26h	; &
+                db  2Ch	; ,
+                db  2Dh	; -
+                db  2Eh	; .
+                db  2Fh	; /
+                db  30h	; 0
+                db  31h	; 1
+                db  32h	; 2
 ; ---------------------------------------------------------------------------
-keyboard_error:				; ...
-                ; —·‡Ò˚‚‡ÂÏ ÍÓÌÚÓÎÎÂ ÍÎ‡‚Ë‡ÚÛ˚
-                mov	al, 20h
-                out	20h, al		; œÓÒ˚Î‡ÂÏ EOI
-                jmp	process_key_complete
+locked_space_check:
+		cmp	al, 39h			; –°–∫–∞–Ω-–∫–æ–¥ 39h ‚Äì –ø—Ä–æ–±–µ–ª?
+		jne	alt_digit_search	; –ù–µ—Ç ‚Äì –∏—Å–∫–∞—Ç—å Alt-—Ü–∏—Ñ—Ä—ã
+                mov	al, 20h			; –î–∞ ‚Äì ASCII-–∫–æ–¥ –ø—Ä–æ–±–µ–ª–∞
+                jmp	enqueue_check		; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+alt_digit_search:
+                mov	di, offset alt_digit_table ; DI = –Ω–∞—á–∞–ª–æ —Ç–∞–±–ª–∏—Ü—ã Alt-—Ü–∏—Ñ—Ä
+                mov	cx, 0Ah			; –ò—Å–∫–∞—Ç—å 10 —Ü–∏—Ñ—Ä
+                repne scasb			; –ü–æ–∏—Å–∫ —Å–∫–∞–Ω-–∫–æ–¥–∞ –≤ —Ç–∞–±–ª–∏—Ü–µ
+                jnz	short alt_letter_search ; –ù–µ —Ü–∏—Ñ—Ä–∞ ‚Äì –∏—Å–∫–∞—Ç—å –±—É–∫–≤—É
+                sub	di, offset alt_digit_offset ; DI = –Ω–æ–º–µ—Ä —Ü–∏—Ñ—Ä—ã (1-10?)
+                mov	al, [ds:keybd_alt_num_] ; –¢–µ–∫—É—â–µ–µ –Ω–∞–∫–æ–ø–ª–µ–Ω–Ω–æ–µ —á–∏—Å–ª–æ
+                mov	ah, 0Ah			; –£–º–Ω–æ–∂–∏—Ç—å –Ω–∞ 10
+                mul	ah			; AX = AL * 10
+                add	ax, di			; –î–æ–±–∞–≤–∏—Ç—å –Ω–æ–≤—É—é —Ü–∏—Ñ—Ä—É
+                mov	[ds:keybd_alt_num_], al ; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å
+                jmp	short int09_exit	; –í—ã–π—Ç–∏
+; ---------------------------------------------------------------------------
 
+alt_letter_search:
+                mov	[byte ptr ds:keybd_alt_num_], 0 ; –°–±—Ä–æ—Å–∏—Ç—å —Å—á—ë—Ç—á–∏–∫ Alt-—Ü–∏—Ñ—Ä
+                mov	cx, 1Ah			; –ò—Å–∫–∞—Ç—å 26 –±—É–∫–≤
+                repne scasb			; –ü–æ–∏—Å–∫ —Å–∫–∞–Ω-–∫–æ–¥–∞ –≤ —Ç–∞–±–ª–∏—Ü–µ
+                jnz	short other_locked_keys ; –ù–µ –±—É–∫–≤–∞ ‚Äì –¥—Ä—É–≥–∏–µ –∫–ª–∞–≤–∏—à–∏
+                mov	al, 0			; –ö–æ–¥ Alt-–±—É–∫–≤—ã (0 ‚Äì —Ä–∞—Å—à–∏—Ä–µ–Ω–Ω—ã–π)
+                jmp	enqueue_check		; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+other_locked_keys:
+                cmp	al, 2			; –°–∫–∞–Ω-–∫–æ–¥ –º–µ–Ω—å—à–µ 2?
+                jb	short func_keys_locked_skip ; –î–∞ ‚Äì –ø—Ä–æ–ø—É—Å—Ç–∏—Ç—å
+                cmp	al, 0Eh			; –°–∫–∞–Ω-–∫–æ–¥ –º–µ–Ω—å—à–µ 0Eh?
+                jnb	short func_keys_locked_skip ; –ù–µ—Ç ‚Äì –ø—Ä–æ–ø—É—Å—Ç–∏—Ç—å
+                add	ah, 76h			; –ü—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å –≤ —Ä–∞—Å—à–∏—Ä–µ–Ω–Ω—ã–π –∫–æ–¥
+                mov	al, 0			; AL = 0 (—Ä–∞—Å—à–∏—Ä–µ–Ω–Ω—ã–π)
+                jmp	enqueue_check		; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+func_keys_locked_skip:
+                cmp	al, 3Bh			; –°–∫–∞–Ω-–∫–æ–¥ >= 3Bh (F1)?
+                jnb	short func_keys_locked_ext ; –î–∞ ‚Äì —Ä–∞—Å—à–∏—Ä–µ–Ω–Ω—ã–µ —Ñ—É–Ω–∫—Ü–∏–æ–Ω–∞–ª—å–Ω—ã–µ
+
+func_keys_locked_ignore:
+                jmp	int09_exit		; –ò–≥–Ω–æ—Ä–∏—Ä–æ–≤–∞—Ç—å
+; ---------------------------------------------------------------------------
+
+func_keys_locked_ext:
+                cmp	al, 47h			; –°–∫–∞–Ω-–∫–æ–¥ >= 47h (—Ü–∏—Ñ—Ä–æ–≤–∞—è –∫–ª–∞–≤–∏–∞—Ç—É—Ä–∞)?
+                jnb	short func_keys_locked_ignore ; –î–∞ ‚Äì –∏–≥–Ω–æ—Ä–∏—Ä–æ–≤–∞—Ç—å
+                mov	bx, offset func_table_locked ; BX = —Ç–∞–±–ª–∏—Ü–∞ —Ñ—É–Ω–∫—Ü. –∫–ª–∞–≤–∏—à –ø—Ä–∏ –±–ª–æ–∫–∏—Ä–æ–≤–∫–µ
+                jmp	extended_key_convert	; –ü—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å –∏ –ø–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+keyboard_unlocked:
+                test	[byte ptr ds:keybd_flags_1_], 4 ; Scroll Lock –∞–∫—Ç–∏–≤–µ–Ω?
+                jz	short unlocked_normal	; –ù–µ—Ç ‚Äì –æ–±—ã—á–Ω—ã–π —Ä–µ–∂–∏–º
+                cmp	al, 46h			; –°–∫–∞–Ω-–∫–æ–¥ 46h = Break (Ctrl+Scroll Lock)?
+                jnz	short not_break		; –ù–µ—Ç ‚Äì –Ω–µ Break
+                mov	bx, 1Eh			; –ù–∞—á–∞–ª–æ –±—É—Ñ–µ—Ä–∞ –∫–ª–∞–≤–∏–∞—Ç—É—Ä—ã (40:1Eh)
+                mov	[ds:keybd_q_head_], bx	; –°–±—Ä–æ—Å–∏—Ç—å –≥–æ–ª–æ–≤—É –æ—á–µ—Ä–µ–¥–∏
+                mov	[ds:keybd_q_tail_], bx	; –°–±—Ä–æ—Å–∏—Ç—å —Ö–≤–æ—Å—Ç –æ—á–µ—Ä–µ–¥–∏
+                mov	[byte ptr ds:keybd_break_], 80h ; –£—Å—Ç–∞–Ω–æ–≤–∏—Ç—å —Ñ–ª–∞–≥ Break
+                int	1Bh			; –í—ã–∑–≤–∞—Ç—å –ø–æ–ª—å–∑–æ–≤–∞—Ç–µ–ª—å—Å–∫–∏–π –æ–±—Ä–∞–±–æ—Ç—á–∏–∫ Break
+                mov	ax, 0			; –ü—É—Å—Ç–æ–π –∫–æ–¥
+                jmp	enqueue_check		; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+not_break:
+                cmp	al, 45h			; Num Lock?
+                jnz	short not_numlock	; –ù–µ—Ç
+                or	[byte ptr ds:keybd_flags_2_], 8 ; –£—Å—Ç–∞–Ω–æ–≤–∏—Ç—å —Ñ–ª–∞–≥ Pause
+                mov	al, 20h			; EOI ‚Äì –∫–æ–Ω–µ—Ü –ø—Ä–µ—Ä—ã–≤–∞–Ω–∏—è
+                out	20h, al			; –ü–æ—Å–ª–∞—Ç—å –∫–æ–Ω—Ç—Ä–æ–ª–ª–µ—Ä—É –ø—Ä–µ—Ä—ã–≤–∞–Ω–∏–π
+                cmp	[byte ptr ds:video_mode_], 7 ; –ú–æ–Ω–æ—Ö—Ä–æ–º–Ω—ã–π —Ä–µ–∂–∏–º?
+                jz	short wait_pause_release ; –î–∞ ‚Äì –ø—Ä–æ–ø—É—Å—Ç–∏—Ç—å –≤–æ—Å—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω–∏–µ –≤–∏–¥–µ–æ
+                mov	dx, 3D8h		; –ü–æ—Ä—Ç —É–ø—Ä–∞–≤–ª–µ–Ω–∏—è CGA
+                mov	al, [ds:video_mode_reg_] ; –¢–µ–∫—É—â–∏–π —Ä–µ–≥–∏—Å—Ç—Ä –≤–∏–¥–µ–æ—Ä–µ–∂–∏–º–∞
+                out	dx, al			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å (—É–±—Ä–∞—Ç—å –º–µ—Ä—Ü–∞–Ω–∏–µ)
+
+wait_pause_release:
+                test	[byte ptr ds:keybd_flags_2_], 8 ; Pause –µ—â—ë –Ω–∞–∂–∞—Ç?
+                jnz	short wait_pause_release ; –î–∞ ‚Äì –∂–¥—ë–º –æ—Ç–ø—É—Å–∫–∞–Ω–∏—è
+                jmp	int09_exit_without_sti	; –í—ã—Ö–æ–¥ –±–µ–∑ CLI
+; ---------------------------------------------------------------------------
+
+not_numlock:
+                cmp	al, 37h			; Print Screen?
+                jnz	short not_printscreen	; –ù–µ—Ç
+                mov	ax, 7200h		; –†–∞—Å—à–∏—Ä–µ–Ω–Ω—ã–π –∫–æ–¥ Print Screen
+                jmp	enqueue_check		; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+not_printscreen:
+                mov	bx, offset scroll_off_table ; BX = —Ç–∞–±–ª–∏—Ü–∞ –ø—Ä–∏ Scroll Lock –≤—ã–∫–ª
+                cmp	al, 3Bh			; –§—É–Ω–∫—Ü–∏–æ–Ω–∞–ª—å–Ω—ã–µ –∫–ª–∞–≤–∏—à–∏?
+                jnb	short scroll_func_keys	; –î–∞ ‚Äì –æ—Ç–¥–µ–ª—å–Ω–∞—è —Ç–∞–±–ª–∏—Ü–∞
+                jmp	short convert_with_table ; –ù–µ—Ç ‚Äì –ø—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å –ø–æ —Ç–∞–±–ª–∏—Ü–µ
+; ---------------------------------------------------------------------------
+
+scroll_func_keys:
+                mov	bx, offset scroll_func_table ; BX = —Ç–∞–±–ª–∏—Ü–∞ —Ñ—É–Ω–∫—Ü. –∫–ª–∞–≤–∏—à –ø—Ä–∏ Scroll Lock
+                jmp	extended_key_convert	; –ü—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å –≤ —Ä–∞—Å—à–∏—Ä–µ–Ω–Ω—ã–π –∫–æ–¥
+; ---------------------------------------------------------------------------
+
+unlocked_normal:
+                cmp	al, 47h			; –°–∫–∞–Ω-–∫–æ–¥ >= 47h (—Ü–∏—Ñ—Ä–æ–≤–∞—è –∫–ª–∞–≤–∏–∞—Ç—É—Ä–∞)?
+                jnb	short numeric_keypad	; –î–∞ ‚Äì –æ–±—Ä–∞–±–æ—Ç–∫–∞ —Ü–∏—Ñ—Ä–æ–≤–æ–π –∫–ª–∞–≤–∏–∞—Ç—É—Ä—ã
+                test	[byte ptr ds:keybd_flags_1_], 3 ; Shift –Ω–∞–∂–∞—Ç?
+                jz	short no_shift_normal	; –ù–µ—Ç ‚Äì –±–µ–∑ Shift
+                cmp	al, 0Fh			; Tab?
+                jnz	short not_tab_shift	; –ù–µ—Ç ‚Äì –º–æ–∂–µ—Ç –±—ã—Ç—å Print Screen?
+                mov	ax, 0F00h		; –†–∞—Å—à–∏—Ä–µ–Ω–Ω—ã–π –∫–æ–¥ Tab (Shift+Tab)
+                jmp	short enqueue_check	; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+not_tab_shift:
+                cmp	al, 37h			; Print Screen?
+                jnz	short not_ps_shift	; –ù–µ—Ç
+                mov	al, 20h			; EOI
+                out	20h, al			; –ü–æ—Å–ª–∞—Ç—å –∫–æ–Ω—Ç—Ä–æ–ª–ª–µ—Ä—É –ø—Ä–µ—Ä—ã–≤–∞–Ω–∏–π
+                int	5			; –í—ã–∑–≤–∞—Ç—å –æ–±—Ä–∞–±–æ—Ç—á–∏–∫ Print Screen (int 5)
+                jmp	int09_exit_without_sti	; –í—ã—Ö–æ–¥ –±–µ–∑ CLI
+; ---------------------------------------------------------------------------
+
+not_ps_shift:
+                cmp	al, 3Bh			; –§—É–Ω–∫—Ü–∏–æ–Ω–∞–ª—å–Ω—ã–µ –∫–ª–∞–≤–∏—à–∏ (F1-F10)?
+                jb	short shift_function_key ; –î–∞ ‚Äì —Å Shift
+                mov	bx, offset shift_func_table ; BX = —Ç–∞–±–ª–∏—Ü–∞ Shift+—Ñ—É–Ω–∫—Ü. –∫–ª–∞–≤–∏—à–∏
+                jmp	extended_key_convert	; –ü—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å –≤ —Ä–∞—Å—à–∏—Ä–µ–Ω–Ω—ã–π –∫–æ–¥
+; ---------------------------------------------------------------------------
+
+shift_function_key:
+                mov	bx, offset shift_regular_table ; BX = —Ç–∞–±–ª–∏—Ü–∞ –æ–±—ã—á–Ω—ã—Ö –∫–ª–∞–≤–∏—à —Å Shift
+                jmp	short convert_with_table ; –ü—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å –≤ ASCII
+; ---------------------------------------------------------------------------
+
+numeric_keypad:
+                test	[byte ptr ds:keybd_flags_1_], 20h ; Num Lock?
+                jnz	short shift_on_numlock_off ; –î–∞ ‚Äì –ø–µ—Ä–µ–π—Ç–∏ –∫ –ø—Ä–æ–≤–µ—Ä–∫–µ NumLock
+                test	[byte ptr ds:keybd_flags_1_], 3 ; Shift?
+                jnz	short shift_on_numlock_off_sub ; –î–∞ ‚Äì –≤—Ä–µ–º–µ–Ω–Ω–∞—è –∏–Ω–≤–µ—Ä—Å–∏—è (—Ü–∏—Ñ—Ä—ã)
+; ---------------------------------------------------------------------------
+numlock_off_no_shift:
+                cmp	al, 4Ah			; Minus –Ω–∞ —Ü–∏—Ñ—Ä–æ–≤–æ–π –∫–ª–∞–≤–∏–∞—Ç—É—Ä–µ?
+                jz	short keypad_minus	; –î–∞ ‚Äì –æ–±—Ä–∞–±–æ—Ç–∞—Ç—å '-'
+                cmp	al, 4Eh			; Plus?
+                jz	short keypad_plus	; –î–∞ ‚Äì –æ–±—Ä–∞–±–æ—Ç–∞—Ç—å '+'
+                sub	al, 47h			; –ò–Ω–¥–µ–∫—Å –∫–ª–∞–≤–∏—à–∏ (0-11)
+                mov	bx, offset numlock_off_table ; –¢–∞–±–ª–∏—Ü–∞ —Å–∫–∞–Ω-–∫–æ–¥–æ–≤ –∫—É—Ä—Å–æ—Ä–∞
+                jmp	extended_key_convert_common ; –ü—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å –≤ —Ä–∞—Å—à–∏—Ä–µ–Ω–Ω—ã–π –∫–æ–¥
+; ---------------------------------------------------------------------------
+
+keypad_minus:
+                mov	ax, 4A2Dh		; AL = 2Dh ('-'), AH = 4Ah
+                jmp	short enqueue_check	; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+keypad_plus:
+                mov	ax, 4E2Bh		; AL = 2Bh ('+'), AH = 4Eh
+                jmp	short enqueue_check	; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+shift_on_numlock_off:
+                test	[byte ptr ds:keybd_flags_1_], 3 ; Shift?
+                jnz	short numlock_off_no_shift ; –î–∞ ‚Äì –∫—É—Ä—Å–æ—Ä–Ω—ã–µ –∫–ª–∞–≤–∏—à–∏ (–æ—Ä–∏–≥. loc_FEB91)
+; ---------------------------------------------------------------------------
+shift_on_numlock_off_sub:
+                sub	al, 46h			; –ò–Ω–¥–µ–∫—Å –¥–ª—è —Ü–∏—Ñ—Ä (46h, –∞ –Ω–µ 47h!)
+                mov	bx, offset numlock_on_shift_table ; –¢–∞–±–ª–∏—Ü–∞ ASCII —Ü–∏—Ñ—Ä
+                jmp	short convert_with_table ; –ü—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å –≤ ASCII
+; ---------------------------------------------------------------------------
+
+no_shift_normal:
+                cmp	al, 3Bh			; –§—É–Ω–∫—Ü–∏–æ–Ω–∞–ª—å–Ω—ã–µ –∫–ª–∞–≤–∏—à–∏ –±–µ–∑ Shift?
+                jb	short regular_key_no_shift ; –ù–µ—Ç ‚Äì –æ–±—ã—á–Ω–∞—è –∫–ª–∞–≤–∏—à–∞
+                mov	al, 0			; –î–∞ ‚Äì –∏–≥–Ω–æ—Ä–∏—Ä–æ–≤–∞—Ç—å (–∫–æ–¥ 0)
+                jmp	short enqueue_check	; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å (–ø—É—Å—Ç–æ–π –∫–æ–¥)
+; ---------------------------------------------------------------------------
+
+regular_key_no_shift:
+                mov	bx, offset regular_table ; BX = —Ç–∞–±–ª–∏—Ü–∞ –æ–±—ã—á–Ω—ã—Ö –∫–ª–∞–≤–∏—à –±–µ–∑ Shift
+
+convert_with_table:
+                dec	al			; –ò–Ω–¥–µ–∫—Å = —Å–∫–∞–Ω-–∫–æ–¥ - 1
+                xlat	[byte ptr cs:bx]	; –ü—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å —á–µ—Ä–µ–∑ —Ç–∞–±–ª–∏—Ü—É
+
+enqueue_check:
+                cmp	al, 0FFh		; –ö–æ–¥ FFh (–∏–≥–Ω–æ—Ä–∏—Ä–æ–≤–∞—Ç—å)?
+                jz	short ignore_key	; –î–∞ ‚Äì –ø—Ä–æ–ø—É—Å—Ç–∏—Ç—å
+                cmp	ah, 0FFh		; –†–∞—Å—à–∏—Ä–µ–Ω–Ω—ã–π –∫–æ–¥ FFh?
+                jz	short ignore_key	; –î–∞ ‚Äì –ø—Ä–æ–ø—É—Å—Ç–∏—Ç—å
+
+caps_check:
+                test	[byte ptr ds:keybd_flags_1_], 40h ; Caps Lock?
+                jz	short put_in_queue	; –ù–µ—Ç ‚Äì —Å—Ä–∞–∑—É –≤ –æ—á–µ—Ä–µ–¥—å
+                test	[byte ptr ds:keybd_flags_1_], 3 ; Shift –Ω–∞–∂–∞—Ç?
+                jz	short caps_uppercase	; –ù–µ—Ç ‚Äì –∏–Ω–≤–µ—Ä—Ç–∏—Ä–æ–≤–∞—Ç—å —Ä–µ–≥–∏—Å—Ç—Ä
+                cmp	al, 41h			; –ö–æ–¥ –º–µ–Ω—å—à–µ 'A'?
+                jb	short put_in_queue	; –î–∞ ‚Äì –Ω–µ –±—É–∫–≤–∞
+                cmp	al, 5Ah			; –ö–æ–¥ –±–æ–ª—å—à–µ 'Z'?
+                ja	short put_in_queue	; –î–∞ ‚Äì –Ω–µ –±—É–∫–≤–∞
+                add	al, 20h			; –ü—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å –≤ –Ω–∏–∂–Ω–∏–π —Ä–µ–≥–∏—Å—Ç—Ä
+                jmp	short put_in_queue	; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+ignore_key:
+                jmp	int09_exit		; –ò–≥–Ω–æ—Ä–∏—Ä–æ–≤–∞—Ç—å –∫–æ–¥, –≤—ã–π—Ç–∏
+; ---------------------------------------------------------------------------
+
+caps_uppercase:
+                cmp	al, 61h			; –ö–æ–¥ –º–µ–Ω—å—à–µ 'a'?
+                jb	short put_in_queue	; –î–∞ ‚Äì –Ω–µ –±—É–∫–≤–∞
+                cmp	al, 7Ah			; –ö–æ–¥ –±–æ–ª—å—à–µ 'z'?
+                ja	short put_in_queue	; –î–∞ ‚Äì –Ω–µ –±—É–∫–≤–∞
+                sub	al, 20h			; –ü—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å –≤ –≤–µ—Ä—Ö–Ω–∏–π —Ä–µ–≥–∏—Å—Ç—Ä
+
+put_in_queue:
+                mov	bx, [ds:keybd_q_tail_] ; –¢–µ–∫—É—â–∏–π —Ö–≤–æ—Å—Ç –æ—á–µ—Ä–µ–¥–∏
+                mov	si, bx			; SI = —É–∫–∞–∑–∞—Ç–µ–ª—å –Ω–∞ —Å–≤–æ–±–æ–¥–Ω—É—é —è—á–µ–π–∫—É
+                call	update_queue_pointer	; –û–±–Ω–æ–≤–∏—Ç—å —É–∫–∞–∑–∞—Ç–µ–ª—å (—Ü–∏–∫–ª–∏—á–µ—Å–∫–∏ +2)
+                cmp	bx, [ds:keybd_q_head_] ; –û—á–µ—Ä–µ–¥—å –ø–æ–ª–Ω–∞ (—Ö–≤–æ—Å—Ç –¥–æ–≥–Ω–∞–ª –≥–æ–ª–æ–≤—É)?
+                jz	short queue_full	; –î–∞ ‚Äì –ø–æ—Ç–µ—Ä—è —Å–∏–º–≤–æ–ª–∞, –∑–≤—É–∫–æ–≤–æ–π —Å–∏–≥–Ω–∞–ª
+                mov	[si], ax		; –ü–æ–º–µ—Å—Ç–∏—Ç—å —Å–ª–æ–≤–æ –≤ –±—É—Ñ–µ—Ä
+                mov	[ds:keybd_q_tail_], bx ; –û–±–Ω–æ–≤–∏—Ç—å —Ö–≤–æ—Å—Ç
+                jmp	int09_exit		; –í—ã–π—Ç–∏
+; ---------------------------------------------------------------------------
+
+queue_full:
+                call	keyboard_beep		; –ó–≤—É–∫–æ–≤–æ–π —Å–∏–≥–Ω–∞–ª (–ø–µ—Ä–µ–ø–æ–ª–Ω–µ–Ω–∏–µ)
+                jmp	int09_exit		; –í—ã–π—Ç–∏
+; ---------------------------------------------------------------------------
+
+extended_key_convert:
+                sub	al, 3Bh			; –ü—Ä–µ–æ–±—Ä–∞–∑–æ–≤–∞—Ç—å –∏–Ω–¥–µ–∫—Å –¥–ª—è —Ñ—É–Ω–∫—Ü. –∫–ª–∞–≤–∏—à (3Bh = F1)
+
+extended_key_convert_common:
+                xlat	[byte ptr cs:bx]	; –ü–æ–ª—É—á–∏—Ç—å —Å–∫–∞–Ω-–∫–æ–¥ –∏–∑ —Ç–∞–±–ª–∏—Ü—ã
+                mov	ah, al			; AH = —Å–∫–∞–Ω-–∫–æ–¥
+                mov	al, 0			; AL = 0 (—Ä–∞—Å—à–∏—Ä–µ–Ω–Ω—ã–π ASCII)
+                jmp	enqueue_check		; –ü–æ–º–µ—Å—Ç–∏—Ç—å –≤ –æ—á–µ—Ä–µ–¥—å
+; ---------------------------------------------------------------------------
+
+keyboard_beep:
+                push	ax			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å AX
+                push	bx			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å BX
+                push	cx			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å CX
+                mov	bx, 0C0h		; –°—á—ë—Ç—á–∏–∫ –¥–ª–∏—Ç–µ–ª—å–Ω–æ—Å—Ç–∏ —Å–∏–≥–Ω–∞–ª–∞
+                in	al, 61h			; –ü—Ä–æ—á–∏—Ç–∞—Ç—å –ø–æ—Ä—Ç B PPI (–¥–∏–Ω–∞–º–∏–∫)
+                push	ax			; –°–æ—Ö—Ä–∞–Ω–∏—Ç—å –∏—Å—Ö–æ–¥–Ω–æ–µ —Å–æ—Å—Ç–æ—è–Ω–∏–µ
+
+beep_loop:
+                and	al, 0FCh		; –°–±—Ä–æ—Å–∏—Ç—å –±–∏—Ç—ã 0 –∏ 1 (–≤—ã–∫–ª. –¥–∏–Ω–∞–º–∏–∫)
+                out	61h, al			; –ó–∞–ø–∏—Å–∞—Ç—å –≤ –ø–æ—Ä—Ç
+                mov	cx, 48h			; –ó–∞–¥–µ—Ä–∂–∫–∞
+
+beep_delay_off:
+                loop	beep_delay_off		; –¶–∏–∫–ª –∑–∞–¥–µ—Ä–∂–∫–∏
+                or	al, 2			; –£—Å—Ç–∞–Ω–æ–≤–∏—Ç—å –±–∏—Ç 1 (–≤–∫–ª. –¥–∏–Ω–∞–º–∏–∫)
+                out	61h, al			; –ó–∞–ø–∏—Å–∞—Ç—å –≤ –ø–æ—Ä—Ç
+                mov	cx, 48h			; –ó–∞–¥–µ—Ä–∂–∫–∞
+
+beep_delay_on:
+                loop	beep_delay_on		; –¶–∏–∫–ª –∑–∞–¥–µ—Ä–∂–∫–∏
+                dec	bx			; –£–º–µ–Ω—å—à–∏—Ç—å —Å—á—ë—Ç—á–∏–∫
+                jnz	short beep_loop		; –ü–æ–≤—Ç–æ—Ä–∏—Ç—å BX —Ä–∞–∑
+                pop	ax			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å –∏—Å—Ö–æ–¥–Ω–æ–µ —Å–æ—Å—Ç–æ—è–Ω–∏–µ
+                out	61h, al			; –ó–∞–ø–∏—Å–∞—Ç—å –≤ –ø–æ—Ä—Ç
+                pop	cx			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å CX
+                pop	bx			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å BX
+                pop	ax			; –í–æ—Å—Å—Ç–∞–Ω–æ–≤–∏—Ç—å AX
+                retn				; –í–æ–∑–≤—Ä–∞—Ç –∏–∑ –ø–æ–¥–ø—Ä–æ–≥—Ä–∞–º–º—ã
 ;-------------------------------------------------------------------------------------------
